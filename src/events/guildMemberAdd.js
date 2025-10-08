@@ -7,26 +7,24 @@ module.exports = {
     try {
       const guild = member.guild;
       
-      // Configurazione predefinita (può essere personalizzata tramite database)
+      // Configurazione predefinita con stile premium MinfoAi
       const config = {
         welcomeChannelId: process.env.WELCOME_CHANNEL_ID,
         logChannelId: process.env.LOG_CHANNEL_ID,
-        welcomeMessage: process.env.WELCOME_MESSAGE || 'Benvenuto/a {user} nel server **{guild}**! 🎉\n\nSperiamo che tu possa divertirti e rispettare le regole del server.',
-        embedColor: '#00FF00',
+        embedColor: '#8A2BE2', // Purple premium color
         enableWelcome: true,
         enableLog: true
       };
-
+      
       // Invio messaggio di benvenuto
       if (config.enableWelcome && config.welcomeChannelId) {
         await sendWelcomeMessage(member, config);
       }
-
+      
       // Log dell'evento
       if (config.enableLog && config.logChannelId) {
         await logMemberJoin(member, config);
       }
-
     } catch (error) {
       console.error('Errore in guildMemberAdd:', error);
       await logError(error, {
@@ -38,140 +36,90 @@ module.exports = {
   }
 };
 
-/**
- * Invia il messaggio di benvenuto personalizzato
- */
 async function sendWelcomeMessage(member, config) {
   try {
-    const welcomeChannel = member.guild.channels.cache.get(config.welcomeChannelId);
+    const guild = member.guild;
+    const welcomeChannel = guild.channels.cache.get(config.welcomeChannelId);
     
     if (!welcomeChannel) {
-      console.warn(`Canale di benvenuto non trovato: ${config.welcomeChannelId}`);
+      console.error('Canale di benvenuto non trovato');
       return;
     }
-
-    // Verifica permessi del bot
-    const botMember = member.guild.members.me;
-    if (!welcomeChannel.permissionsFor(botMember).has([
-      PermissionsBitField.Flags.SendMessages,
-      PermissionsBitField.Flags.EmbedLinks
-    ])) {
-      console.warn(`Permessi insufficienti nel canale di benvenuto: ${welcomeChannel.name}`);
-      return;
-    }
-
-    // Personalizzazione del messaggio
-    const personalizedMessage = config.welcomeMessage
-      .replace(/{user}/g, `<@${member.id}>`)
-      .replace(/{guild}/g, member.guild.name)
-      .replace(/{memberCount}/g, member.guild.memberCount)
-      .replace(/{username}/g, member.user.username);
-
-    // Creazione embed di benvenuto
+    
+    // Statistiche del server
+    const memberCount = guild.memberCount;
+    const onlineMembers = guild.members.cache.filter(m => m.presence?.status === 'online').size;
+    const boostCount = guild.premiumSubscriptionCount || 0;
+    
+    // Creazione embed premium con stile MinfoAi
     const welcomeEmbed = new EmbedBuilder()
+      .setTitle(`🎉 Benvenuto in ${guild.name}!`)
+      .setDescription(`Ciao ${member}! Siamo felici di averti nella nostra community **MinfoAi**!\n\n🤖 **Scopri le potenzialità dell'AI** con il nostro bot avanzato\n📚 **Impara, cresci e condividi** le tue conoscenze\n🎮 **Divertiti** con i nostri giochi e funzionalità interattive`)
       .setColor(config.embedColor)
-      .setTitle('🎉 Nuovo Membro!')
-      .setDescription(personalizedMessage)
       .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-      .addFields([
-        {
-          name: '👤 Utente',
-          value: `${member.user.tag}\n<@${member.id}>`,
-          inline: true
+      .setAuthor({ 
+        name: 'Sistema di Benvenuto MinfoAi', 
+        iconURL: guild.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png'
+      })
+      .addFields(
+        { 
+          name: '👤 Membro', 
+          value: `${member.user.tag}\nID: \`${member.id}\``, 
+          inline: true 
         },
-        {
-          name: '📅 Account Creato',
-          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`,
-          inline: true
+        { 
+          name: '📊 Statistiche Server', 
+          value: `👥 **${memberCount}** membri totali\n🟢 **${onlineMembers}** online\n🚀 **${boostCount}** boost`, 
+          inline: true 
         },
-        {
-          name: '📊 Membri Totali',
-          value: `${member.guild.memberCount}`,
-          inline: true
+        { 
+          name: '📅 Account Creato', 
+          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`, 
+          inline: true 
+        },
+        { 
+          name: '🔗 Link Utili', 
+          value: '📜 <#RULES_CHANNEL_ID> • 💬 <#GENERAL_CHANNEL_ID> • ❓ <#HELP_CHANNEL_ID>', 
+          inline: false 
         }
-      ])
-      .setFooter({
-        text: `ID: ${member.id} • ${member.guild.name}`,
-        iconURL: member.guild.iconURL({ dynamic: true })
+      )
+      .setImage('https://via.placeholder.com/400x100/8A2BE2/FFFFFF?text=MinfoAi+Community') // Placeholder per banner
+      .setFooter({ 
+        text: `Sei il membro #${memberCount} • MinfoAi Premium Bot`, 
+        iconURL: member.user.displayAvatarURL({ dynamic: true }) 
       })
       .setTimestamp();
-
-    await welcomeChannel.send({
-      embeds: [welcomeEmbed]
-    });
-
-    console.log(`✅ Messaggio di benvenuto inviato per ${member.user.tag} in ${welcomeChannel.name}`);
-
+    
+    await welcomeChannel.send({ embeds: [welcomeEmbed] });
+    
   } catch (error) {
     console.error('Errore nell\'invio del messaggio di benvenuto:', error);
-    throw error;
   }
 }
 
-/**
- * Registra l'ingresso del membro nei log
- */
 async function logMemberJoin(member, config) {
   try {
-    const logChannel = member.guild.channels.cache.get(config.logChannelId);
+    const guild = member.guild;
+    const logChannel = guild.channels.cache.get(config.logChannelId);
     
-    if (!logChannel) {
-      console.warn(`Canale log non trovato: ${config.logChannelId}`);
-      return;
-    }
-
-    // Verifica permessi del bot
-    const botMember = member.guild.members.me;
-    if (!logChannel.permissionsFor(botMember).has([
-      PermissionsBitField.Flags.SendMessages,
-      PermissionsBitField.Flags.EmbedLinks
-    ])) {
-      console.warn(`Permessi insufficienti nel canale log: ${logChannel.name}`);
-      return;
-    }
-
-    // Embed per i log
+    if (!logChannel) return;
+    
     const logEmbed = new EmbedBuilder()
-      .setColor('#00AA00')
-      .setAuthor({
-        name: '📥 Membro Entrato',
-        iconURL: member.user.displayAvatarURL({ dynamic: true })
-      })
-      .addFields([
-        {
-          name: 'Utente',
-          value: `${member.user.tag} (<@${member.id}>)`,
-          inline: false
-        },
-        {
-          name: 'ID',
-          value: member.id,
-          inline: true
-        },
-        {
-          name: 'Account Creato',
-          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`,
-          inline: true
-        },
-        {
-          name: 'Membri Totali',
-          value: `${member.guild.memberCount}`,
-          inline: true
-        }
-      ])
-      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 128 }))
-      .setFooter({
-        text: `Membro #${member.guild.memberCount}`,
-        iconURL: member.guild.iconURL({ dynamic: true })
-      })
+      .setTitle('📥 Nuovo Membro')
+      .setDescription(`${member} si è unito al server`)
+      .setColor('#00FF00')
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+      .addFields(
+        { name: '👤 Utente', value: `${member.user.tag} (${member.id})`, inline: true },
+        { name: '📅 Account Creato', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
+        { name: '📊 Membri Totali', value: guild.memberCount.toString(), inline: true }
+      )
+      .setFooter({ text: 'Sistema Log MinfoAi', iconURL: guild.iconURL({ dynamic: true }) })
       .setTimestamp();
-
+    
     await logChannel.send({ embeds: [logEmbed] });
-
-    console.log(`📝 Log ingresso registrato per ${member.user.tag}`);
-
+    
   } catch (error) {
-    console.error('Errore nella registrazione del log di ingresso:', error);
-    throw error;
+    console.error('Errore nel log del nuovo membro:', error);
   }
 }
