@@ -7,26 +7,36 @@ module.exports = {
     try {
       const guild = member.guild;
       
-      // Configurazione predefinita con stile premium MinfoAi
+      // Get server configuration from database
+      const GuildConfig = require('../database/models/GuildConfig');
+      const guildConfig = await GuildConfig.findOne({ guildId: guild.id });
+      
+      if (!guildConfig) {
+        console.log('No guild configuration found, skipping goodbye message');
+        return;
+      }
+      
+      // Configuration from dashboard (/setbot)
       const config = {
-        goodbyeChannelId: process.env.GOODBYE_CHANNEL_ID,
-        logChannelId: process.env.LOG_CHANNEL_ID,
-        embedColor: '#FF6B6B', // Warm red for goodbye
-        enableGoodbye: true,
-        enableLog: true
+        goodbyeChannelId: guildConfig.goodbye?.channelId,
+        logChannelId: guildConfig.logging?.channelId,
+        embedColor: guildConfig.goodbye?.embedColor || '#FF6B6B', // Warm red for goodbye
+        enableGoodbye: guildConfig.goodbye?.enabled || false,
+        enableLog: guildConfig.logging?.enabled || false,
+        customMessage: guildConfig.goodbye?.customMessage
       };
       
-      // Invio messaggio di addio
+      // Send goodbye message
       if (config.enableGoodbye && config.goodbyeChannelId) {
         await sendGoodbyeMessage(member, config);
       }
       
-      // Log dell'evento
+      // Log event
       if (config.enableLog && config.logChannelId) {
         await logMemberLeave(member, config);
       }
     } catch (error) {
-      console.error('Errore in guildMemberRemove:', error);
+      console.error('Error in guildMemberRemove:', error);
       await logError(error, {
         event: 'guildMemberRemove',
         memberId: member.id,
@@ -42,16 +52,16 @@ async function sendGoodbyeMessage(member, config) {
     const goodbyeChannel = guild.channels.cache.get(config.goodbyeChannelId);
     
     if (!goodbyeChannel) {
-      console.error('Canale di addio non trovato');
+      console.error('Goodbye channel not found');
       return;
     }
     
-    // Statistiche del server
+    // Server statistics
     const memberCount = guild.memberCount;
     const daysSinceJoin = member.joinedAt ? Math.floor((Date.now() - member.joinedAt) / (1000 * 60 * 60 * 24)) : 0;
     const accountAge = Math.floor((Date.now() - member.user.createdAt) / (1000 * 60 * 60 * 24));
     
-    // Creazione embed premium con stile MinfoAi
+    // Create premium embed with MinfoAi style
     const goodbyeEmbed = new EmbedBuilder()
       .setTitle(`👋 Addio ${member.user.username}!`)
       .setDescription(`Grazie **${member.user.username}** per aver fatto parte della community **MinfoAi**!\n\n😢 **Ci mancherai** - le tue contribuzioni sono state preziose\n🔗 **Porte sempre aperte** - potrai sempre tornare quando vorrai\n🎆 **Buona fortuna** per le tue avventure future!`)
@@ -74,7 +84,7 @@ async function sendGoodbyeMessage(member, config) {
         },
         { 
           name: '📅 Si è Unito', 
-          value: member.joinedAt ? `<t:${Math.floor(member.joinedAt / 1000)}:F>` : 'Data sconosciuta', 
+          value: member.joinedAt ? `<t:${Math.floor(member.joinedAt / 1000)}:R>` : 'Data sconosciuta', 
           inline: true 
         },
         { 
@@ -83,7 +93,7 @@ async function sendGoodbyeMessage(member, config) {
           inline: false 
         }
       )
-      .setImage('https://via.placeholder.com/400x100/FF6B6B/FFFFFF?text=Arrivederci+dalla+MinfoAi+Community') // Placeholder per banner addio
+      .setImage('https://via.placeholder.com/400x100/FF6B6B/FFFFFF?text=Arrivederci+dalla+MinfoAi+Community')
       .setFooter({ 
         text: `Rimangono ${memberCount} membri • MinfoAi Premium Bot`, 
         iconURL: member.user.displayAvatarURL({ dynamic: true }) 
@@ -93,7 +103,7 @@ async function sendGoodbyeMessage(member, config) {
     await goodbyeChannel.send({ embeds: [goodbyeEmbed] });
     
   } catch (error) {
-    console.error('Errore nell\'invio del messaggio di addio:', error);
+    console.error('Error sending goodbye message:', error);
   }
 }
 
@@ -123,6 +133,6 @@ async function logMemberLeave(member, config) {
     await logChannel.send({ embeds: [logEmbed] });
     
   } catch (error) {
-    console.error('Errore nel log del membro uscito:', error);
+    console.error('Error logging member leave:', error);
   }
 }
