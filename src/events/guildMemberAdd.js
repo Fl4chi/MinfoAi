@@ -7,26 +7,36 @@ module.exports = {
     try {
       const guild = member.guild;
       
-      // Configurazione predefinita con stile premium MinfoAi
+      // Get server configuration from database (assuming you have a GuildConfig model)
+      const GuildConfig = require('../database/models/GuildConfig');
+      const guildConfig = await GuildConfig.findOne({ guildId: guild.id });
+      
+      if (!guildConfig) {
+        console.log('No guild configuration found, skipping welcome message');
+        return;
+      }
+      
+      // Configuration from dashboard (/setbot)
       const config = {
-        welcomeChannelId: process.env.WELCOME_CHANNEL_ID,
-        logChannelId: process.env.LOG_CHANNEL_ID,
-        embedColor: '#8A2BE2', // Purple premium color
-        enableWelcome: true,
-        enableLog: true
+        welcomeChannelId: guildConfig.welcome?.channelId,
+        logChannelId: guildConfig.logging?.channelId,
+        embedColor: guildConfig.welcome?.embedColor || '#8A2BE2', // Purple premium color
+        enableWelcome: guildConfig.welcome?.enabled || false,
+        enableLog: guildConfig.logging?.enabled || false,
+        customMessage: guildConfig.welcome?.customMessage
       };
       
-      // Invio messaggio di benvenuto
+      // Send welcome message
       if (config.enableWelcome && config.welcomeChannelId) {
         await sendWelcomeMessage(member, config);
       }
       
-      // Log dell'evento
+      // Log event
       if (config.enableLog && config.logChannelId) {
         await logMemberJoin(member, config);
       }
     } catch (error) {
-      console.error('Errore in guildMemberAdd:', error);
+      console.error('Error in guildMemberAdd:', error);
       await logError(error, {
         event: 'guildMemberAdd',
         memberId: member.id,
@@ -42,16 +52,16 @@ async function sendWelcomeMessage(member, config) {
     const welcomeChannel = guild.channels.cache.get(config.welcomeChannelId);
     
     if (!welcomeChannel) {
-      console.error('Canale di benvenuto non trovato');
+      console.error('Welcome channel not found');
       return;
     }
     
-    // Statistiche del server
+    // Server statistics
     const memberCount = guild.memberCount;
     const onlineMembers = guild.members.cache.filter(m => m.presence?.status === 'online').size;
     const boostCount = guild.premiumSubscriptionCount || 0;
     
-    // Creazione embed premium con stile MinfoAi
+    // Create premium embed with MinfoAi style
     const welcomeEmbed = new EmbedBuilder()
       .setTitle(`🎉 Benvenuto in ${guild.name}!`)
       .setDescription(`Ciao ${member}! Siamo felici di averti nella nostra community **MinfoAi**!\n\n🤖 **Scopri le potenzialità dell'AI** con il nostro bot avanzato\n📚 **Impara, cresci e condividi** le tue conoscenze\n🎮 **Divertiti** con i nostri giochi e funzionalità interattive`)
@@ -74,7 +84,7 @@ async function sendWelcomeMessage(member, config) {
         },
         { 
           name: '📅 Account Creato', 
-          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`, 
+          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, 
           inline: true 
         },
         { 
@@ -83,7 +93,7 @@ async function sendWelcomeMessage(member, config) {
           inline: false 
         }
       )
-      .setImage('https://via.placeholder.com/400x100/8A2BE2/FFFFFF?text=MinfoAi+Community') // Placeholder per banner
+      .setImage('https://via.placeholder.com/400x100/8A2BE2/FFFFFF?text=MinfoAi+Community') // Placeholder for banner
       .setFooter({ 
         text: `Sei il membro #${memberCount} • MinfoAi Premium Bot`, 
         iconURL: member.user.displayAvatarURL({ dynamic: true }) 
@@ -93,7 +103,7 @@ async function sendWelcomeMessage(member, config) {
     await welcomeChannel.send({ embeds: [welcomeEmbed] });
     
   } catch (error) {
-    console.error('Errore nell\'invio del messaggio di benvenuto:', error);
+    console.error('Error sending welcome message:', error);
   }
 }
 
@@ -120,6 +130,6 @@ async function logMemberJoin(member, config) {
     await logChannel.send({ embeds: [logEmbed] });
     
   } catch (error) {
-    console.error('Errore nel log del nuovo membro:', error);
+    console.error('Error logging new member:', error);
   }
 }
