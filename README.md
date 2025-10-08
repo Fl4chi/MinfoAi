@@ -1,48 +1,60 @@
 # MinfoAi
-
 MinfoAi è un bot Discord intelligente e completo con AI proprietaria, moderazione avanzata, gamification, musica, giveaway, verifica avanzata e sistemi custom di gestione errori.
+
+## ✨ Embed Message Style
+**MinfoAi** utilizza esclusivamente **messaggi embed premium** per tutte le comunicazioni del bot, garantendo:
+- 🎨 **Estetica Premium**: Design moderno con colori accesi e layout professionale
+- 🖼️ **Elementi Visivi**: Avatar utente, thumbnail, banner personalizzati
+- 📊 **Informazioni Dettagliate**: Statistiche server, timestamp, campi organizzati
+- 🌈 **Palette Colori**: Purple (#8A2BE2) per benvenuti, Red (#FF6B6B) per addii
+- 📱 **Responsive Design**: Ottimizzazione per tutti i dispositivi Discord
+- 🎯 **Branding Consistente**: Identità visiva MinfoAi in tutti i messaggi
+
+### Caratteristiche Embed Style:
+- **Author**: Logo e nome bot MinfoAi
+- **Title**: Titoli descrittivi con emoji
+- **Description**: Testo formattato con markdown
+- **Fields**: Informazioni organizzate in colonne
+- **Thumbnail**: Avatar utente dinamico
+- **Image**: Banner personalizzati per contesto
+- **Footer**: Informazioni aggiuntive e timestamp
+- **Color**: Palette cromatica premium
 
 ## Funzionalità
 
 ### 🎉 Sistema Benvenuto/Addio
-- **Messaggi di Benvenuto**: Messaggi personalizzati automatici quando un nuovo membro si unisce al server
-- **Messaggi di Addio**: Messaggi personalizzati quando un membro lascia il server
+- **Messaggi di Benvenuto**: Messaggi embed premium automatici quando un nuovo membro si unisce al server
+- **Messaggi di Addio**: Messaggi embed personalizzati quando un membro lascia il server
 - **Configurazione Flessibile**: Canali personalizzabili tramite variabili d'ambiente
 - **Logging Avanzato**: Registrazione dettagliata degli eventi con informazioni complete del membro
-- **Embeds Personalizzati**: Messaggi ricchi con avatar, informazioni temporali e statistiche server
+- **Embeds Premium**: Messaggi ricchi con avatar, statistiche server, timestamp e design moderno
 - **Gestione Errori**: Gestione robusta degli errori con logging personalizzato
 - **Controllo Permessi**: Verifica automatica dei permessi del bot prima dell'invio messaggi
+- **Statistiche Real-time**: Contatori membri, utenti online, boost server
+- **Design Responsivo**: Ottimizzato per desktop e mobile Discord
 
 #### Configurazione Variabili Ambiente (Benvenuto/Addio)
 ```env
 # Canale per messaggi di benvenuto
 WELCOME_CHANNEL_ID=123456789
-
 # Canale per messaggi di addio  
 GOODBYE_CHANNEL_ID=123456789
-
 # Canale per i log degli eventi
 LOG_CHANNEL_ID=123456789
-
-# Messaggi personalizzati (opzionali)
-WELCOME_MESSAGE="Benvenuto/a {user} nel server **{guild}**! 🎉\n\nSperiamo che tu possa divertirti e rispettare le regole del server."
-GOODBYE_MESSAGE="Addio **{username}** 😭\n\nGrazie per aver fatto parte della comunità **{guild}**!\n\nSperiamo di rivederti presto!"
 ```
 
-#### Placeholder Disponibili
-- `{user}` - Menzione dell'utente (<@123456789>)
-- `{username}` - Nome utente senza menzione
-- `{guild}` - Nome del server
-- `{memberCount}` - Numero totale di membri
+#### Stile Embed Premium Implementato
+- **Welcome Embed**: Purple premium (#8A2BE2) con statistiche server, avatar utente, link utili
+- **Goodbye Embed**: Warm red (#FF6B6B) con tempo trascorso, ricordi condivisi, statistiche
+- **Log Embed**: Colori specifici per tracking amministrativo eventi
+- **Design Elements**: Thumbnails, banners, footer informativi, timestamp dinamici
 
 ## Requisiti
-
 - Node.js >= 18
 - Token Discord Bot (`DISCORD_TOKEN`)
 - MongoDB URI (`MONGODB_URI`)
 
 ## Setup
-
 1. Clona la repo e installa le dipendenze:
    ```bash
    npm install
@@ -70,40 +82,33 @@ GOODBYE_MESSAGE="Addio **{username}** 😭\n\nGrazie per aver fatto parte della 
    npm start
    ```
 
-## Struttura Progetto
+## 🎨 Embed Message Style Features
 
-- `src/index.js`: bootstrap app, validazione env, connessione MongoDB, avvio bot
-- `src/bot.js`: client Discord.js v14, caricamento comandi/eventi modulari
-- `src/commands`: comandi (slash e prefix) caricati dinamicamente
-- `src/events`: eventi Discord caricati dinamicamente
-  - `src/events/guildMemberAdd.js`: gestore eventi per nuovi membri
-  - `src/events/guildMemberRemove.js`: gestore eventi per membri che lasciano
-- `src/utils/loader.js`: helper per caricare comandi ed eventi
-- `src/errors`: sistema di gestione errori personalizzato integrato
-- altre cartelle già predisposte per moduli futuri (moderazione, musica, gamification, giveaway, verifica, ecc.)
+### Welcome Messages
+- **Colore**: Purple Premium (#8A2BE2)
+- **Elementi**: Avatar utente, statistiche server, link utili
+- **Informazioni**: Data unione, membri totali, utenti online, boost
+- **Design**: Thumbnail utente, banner benvenuto, footer informativo
 
-## Caratteristiche Tecniche
+### Goodbye Messages  
+- **Colore**: Warm Red (#FF6B6B)
+- **Elementi**: Statistiche permanenza, ricordi condivisi
+- **Informazioni**: Giorni nel server, età account, data unione
+- **Design**: Messaggio emotivo, banner addio, footer personalizzato
 
-### Event Handlers Modulari
-Il sistema di eventi è completamente modulare con:
-- Caricamento automatico degli eventi dalla cartella `src/events`
-- Gestione errori integrata per ogni evento
-- Logging dettagliato delle operazioni
-- Verifica automatica dei permessi del bot
+### Logging System
+- **Embeds Amministrativi**: Per tracking eventi interni
+- **Informazioni Dettagliate**: ID utente, timestamp, statistiche
+- **Colori Specifici**: Verde per join, rosso per leave
 
-### Sistema di Logging
-- Log strutturati per debugging
-- Registrazione eventi nei canali Discord configurati
-- Gestione errori con stack trace completo
-- Informazioni dettagliate su membri (ruoli, date, statistiche)
+## 📝 Note Tecniche
 
-## Note
+- Tutti i messaggi del bot utilizzano **esclusivamente Discord Embeds**
+- **Nessun messaggio di testo semplice** viene inviato dal bot
+- Design **premium e professionale** per ogni interazione
+- **Compatibilità completa** con tutti i client Discord
+- **Branding MinfoAi** consistente in tutta l'esperienza utente
 
-- Nessuna API di terze parti per l'AI: l'architettura è pronta per moduli AI proprietari.
-- Il sistema errori personalizzato è integrato negli handler eventi.
-- Tutti gli eventi sono ottimizzati per prestazioni e modularità.
-- Supporto completo per Discord.js v14 con tutte le nuove funzionalità.
+---
 
-## Licenza
-
-MIT
+*MinfoAi - Bot Discord Premium con Embed Message Style avanzato*
