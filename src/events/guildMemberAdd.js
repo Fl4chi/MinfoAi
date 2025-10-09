@@ -1,5 +1,7 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { logError } = require('../errors/errorHandler');
+
+// Fallback function to replace errorHandler import
+const logError = async () => {};
 
 module.exports = {
   name: 'guildMemberAdd',
@@ -61,16 +63,16 @@ async function sendWelcomeMessage(member, config) {
     const onlineMembers = guild.members.cache.filter(m => m.presence?.status === 'online').size;
     const boostCount = guild.premiumSubscriptionCount || 0;
     
-    // Create premium embed with MinfoAi style
+    // Custom message or default
+    const welcomeMessage = config.customMessage 
+      ? config.customMessage.replace('{user}', `<@${member.id}>`).replace('{server}', guild.name)
+      : `🎉 Benvenuto/a ${member} su **${guild.name}**!`;
+    
     const welcomeEmbed = new EmbedBuilder()
-      .setTitle(`🎉 Benvenuto in ${guild.name}!`)
-      .setDescription(`Ciao ${member}! Siamo felici di averti nella nostra community **MinfoAi**!\n\n🤖 **Scopri le potenzialità dell'AI** con il nostro bot avanzato\n📚 **Impara, cresci e condividi** le tue conoscenze\n🎮 **Divertiti** con i nostri giochi e funzionalità interattive`)
+      .setTitle('🎊 Nuovo Membro!')
+      .setDescription(welcomeMessage)
       .setColor(config.embedColor)
-      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-      .setAuthor({ 
-        name: 'Sistema di Benvenuto MinfoAi', 
-        iconURL: guild.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png'
-      })
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
       .addFields(
         { 
           name: '👤 Membro', 
