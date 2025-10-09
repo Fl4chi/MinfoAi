@@ -14,7 +14,6 @@ module.exports = {
       const guildConfig = await GuildConfig.findOne({ guildId: guild.id });
       
       if (!guildConfig) {
-        console.log('No guild configuration found, skipping welcome message');
         return;
       }
       
@@ -38,7 +37,6 @@ module.exports = {
         await logMemberJoin(member, config);
       }
     } catch (error) {
-      console.error('Error in guildMemberAdd:', error);
       await logError(error, {
         event: 'guildMemberAdd',
         memberId: member.id,
@@ -54,23 +52,23 @@ async function sendWelcomeMessage(member, config) {
     const welcomeChannel = guild.channels.cache.get(config.welcomeChannelId);
     
     if (!welcomeChannel) {
-      console.error('Welcome channel not found');
       return;
     }
     
-    // Server statistics
+    // Check bot permissions
+    if (!welcomeChannel.permissionsFor(guild.members.me).has([PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks])) {
+      return;
+    }
+    
+    // Get member stats
     const memberCount = guild.memberCount;
-    const onlineMembers = guild.members.cache.filter(m => m.presence?.status === 'online').size;
+    const onlineMembers = guild.members.cache.filter(m => m.presence?.status !== 'offline').size;
     const boostCount = guild.premiumSubscriptionCount || 0;
     
-    // Custom message or default
-    const welcomeMessage = config.customMessage 
-      ? config.customMessage.replace('{user}', `<@${member.id}>`).replace('{server}', guild.name)
-      : `🎉 Benvenuto/a ${member} su **${guild.name}**!`;
-    
+    // Create welcome embed
     const welcomeEmbed = new EmbedBuilder()
-      .setTitle('🎊 Nuovo Membro!')
-      .setDescription(welcomeMessage)
+      .setTitle(`🎉 Benvenuto/a ${member.user.username}!`)
+      .setDescription(config.customMessage || `Benvenuto/a su **${guild.name}**!\n\nSiamo felici di averti qui con noi! 🚀`)
       .setColor(config.embedColor)
       .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
       .addFields(
@@ -105,7 +103,7 @@ async function sendWelcomeMessage(member, config) {
     await welcomeChannel.send({ embeds: [welcomeEmbed] });
     
   } catch (error) {
-    console.error('Error sending welcome message:', error);
+    // Silent fail
   }
 }
 
@@ -132,6 +130,6 @@ async function logMemberJoin(member, config) {
     await logChannel.send({ embeds: [logEmbed] });
     
   } catch (error) {
-    console.error('Error logging new member:', error);
+    // Silent fail
   }
 }
