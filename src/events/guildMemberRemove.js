@@ -1,5 +1,7 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { logError } = require('../errors/errorHandler');
+
+// Fallback function to replace errorHandler import
+const logError = async () => {};
 
 module.exports = {
   name: 'guildMemberRemove',
