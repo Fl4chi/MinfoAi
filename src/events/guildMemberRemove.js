@@ -14,7 +14,6 @@ module.exports = {
       const guildConfig = await GuildConfig.findOne({ guildId: guild.id });
       
       if (!guildConfig) {
-        console.log('No guild configuration found, skipping goodbye message');
         return;
       }
       
@@ -38,7 +37,6 @@ module.exports = {
         await logMemberLeave(member, config);
       }
     } catch (error) {
-      console.error('Error in guildMemberRemove:', error);
       await logError(error, {
         event: 'guildMemberRemove',
         memberId: member.id,
@@ -54,58 +52,46 @@ async function sendGoodbyeMessage(member, config) {
     const goodbyeChannel = guild.channels.cache.get(config.goodbyeChannelId);
     
     if (!goodbyeChannel) {
-      console.error('Goodbye channel not found');
       return;
     }
     
     // Server statistics
     const memberCount = guild.memberCount;
-    const daysSinceJoin = member.joinedAt ? Math.floor((Date.now() - member.joinedAt) / (1000 * 60 * 60 * 24)) : 0;
-    const accountAge = Math.floor((Date.now() - member.user.createdAt) / (1000 * 60 * 60 * 24));
+    const onlineMembers = guild.members.cache.filter(m => m.presence?.status !== 'offline').size;
     
-    // Create premium embed with MinfoAi style
+    // Create goodbye embed
     const goodbyeEmbed = new EmbedBuilder()
-      .setTitle(`👋 Addio ${member.user.username}!`)
-      .setDescription(`Grazie **${member.user.username}** per aver fatto parte della community **MinfoAi**!\n\n😢 **Ci mancherai** - le tue contribuzioni sono state preziose\n🔗 **Porte sempre aperte** - potrai sempre tornare quando vorrai\n🎆 **Buona fortuna** per le tue avventure future!`)
+      .setTitle(`👋 Arrivederci ${member.user.username}!`)
+      .setDescription(config.customMessage || `${member.user.username} ha lasciato **${guild.name}**\n\nSperiamo di rivederti presto! 🎉`)
       .setColor(config.embedColor)
-      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-      .setAuthor({ 
-        name: 'Sistema Addio MinfoAi', 
-        iconURL: guild.iconURL({ dynamic: true }) || 'https://cdn.discordapp.com/embed/avatars/0.png'
-      })
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
       .addFields(
         { 
-          name: '👤 Membro Partito', 
+          name: '👤 Membro', 
           value: `${member.user.tag}\nID: \`${member.id}\``, 
           inline: true 
         },
         { 
-          name: '📊 Statistiche', 
-          value: `👥 **${memberCount}** membri rimasti\n📅 **${daysSinceJoin}** giorni con noi\n🎂 **${accountAge}** giorni su Discord`, 
+          name: '📊 Statistiche Server', 
+          value: `👥 **${memberCount}** membri rimasti\n🟢 **${onlineMembers}** online`, 
           inline: true 
         },
         { 
-          name: '📅 Si è Unito', 
-          value: member.joinedAt ? `<t:${Math.floor(member.joinedAt / 1000)}:R>` : 'Data sconosciuta', 
+          name: '📅 Membro da', 
+          value: member.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : 'N/A', 
           inline: true 
-        },
-        { 
-          name: '🎉 Ricordi Condivisi', 
-          value: '📜 Conversazioni interessanti • 🤝 Nuove amicizie • 🚀 Crescita insieme nella community', 
-          inline: false 
         }
       )
-      .setImage('https://via.placeholder.com/400x100/FF6B6B/FFFFFF?text=Arrivederci+dalla+MinfoAi+Community')
       .setFooter({ 
-        text: `Rimangono ${memberCount} membri • MinfoAi Premium Bot`, 
-        iconURL: member.user.displayAvatarURL({ dynamic: true }) 
+        text: `Ora siamo ${memberCount} membri • MinfoAi Premium Bot`, 
+        iconURL: guild.iconURL({ dynamic: true }) 
       })
       .setTimestamp();
     
     await goodbyeChannel.send({ embeds: [goodbyeEmbed] });
     
   } catch (error) {
-    console.error('Error sending goodbye message:', error);
+    // Silent fail
   }
 }
 
@@ -116,17 +102,14 @@ async function logMemberLeave(member, config) {
     
     if (!logChannel) return;
     
-    const daysSinceJoin = member.joinedAt ? Math.floor((Date.now() - member.joinedAt) / (1000 * 60 * 60 * 24)) : 0;
-    
     const logEmbed = new EmbedBuilder()
       .setTitle('📤 Membro Uscito')
-      .setDescription(`${member} ha lasciato il server`)
-      .setColor('#FF4444')
+      .setDescription(`${member.user.tag} ha lasciato il server`)
+      .setColor('#FF0000')
       .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
       .addFields(
         { name: '👤 Utente', value: `${member.user.tag} (${member.id})`, inline: true },
-        { name: '📅 Si era Unito', value: member.joinedAt ? `<t:${Math.floor(member.joinedAt / 1000)}:R>` : 'Data sconosciuta', inline: true },
-        { name: '⏱️ Tempo nel Server', value: `${daysSinceJoin} giorni`, inline: true },
+        { name: '📅 Membro da', value: member.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : 'N/A', inline: true },
         { name: '📊 Membri Rimasti', value: guild.memberCount.toString(), inline: true }
       )
       .setFooter({ text: 'Sistema Log MinfoAi', iconURL: guild.iconURL({ dynamic: true }) })
@@ -135,6 +118,6 @@ async function logMemberLeave(member, config) {
     await logChannel.send({ embeds: [logEmbed] });
     
   } catch (error) {
-    console.error('Error logging member leave:', error);
+    // Silent fail
   }
 }
