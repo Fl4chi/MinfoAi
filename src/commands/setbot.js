@@ -3,98 +3,106 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('setbot')
-        .setDescription('🎛️ Dashboard interattiva per configurare tutte le funzionalità del bot'),
+        .setDescription('🎛️ Dashboard interattiva premium per configurare tutte le funzionalità del bot'),
     
     async execute(interaction) {
         // Verifica permessi admin
         if (!interaction.member.permissions.has('Administrator')) {
             return interaction.reply({
-                content: '❌ Non hai i permessi per utilizzare questo comando!',
+                content: '❌ **Accesso Negato** • Solo gli amministratori possono accedere alla dashboard di configurazione.',
                 ephemeral: true
             });
         }
 
         const embed = new EmbedBuilder()
             .setColor('#5865F2')
-            .setTitle('🎛️ Dashboard Configurazione Bot')
-            .setDescription('Benvenuto nella dashboard interattiva di **MinfoAi**!\n\n' +
-                'Seleziona la categoria che desideri configurare dal menu sottostante.\n' +
-                'Tutte le modifiche saranno salvate automaticamente nel database.')
+            .setAuthor({ 
+                name: '🎛️ Dashboard Configurazione Bot',
+                iconURL: interaction.client.user.displayAvatarURL()
+            })
+            .setDescription(
+                '> Benvenuto nella **Dashboard Premium** di MinfoAi\n' +
+                '> Seleziona una categoria dal menu per iniziare la configurazione\n\n' +
+                '**📊 Panoramica Configurazione**\n' +
+                '└ Tutte le impostazioni vengono salvate automaticamente nel database'
+            )
             .addFields(
                 {
-                    name: '👋 Benvenuti',
-                    value: 'Configura messaggi di benvenuto personalizzati',
+                    name: '👋 Benvenuti & Addii',
+                    value: '```yaml\nMessaggi personalizzati\nCanali dedicati\nEmbed customizzabili\n```',
                     inline: true
                 },
                 {
-                    name: '👋 Addii',
-                    value: 'Configura messaggi di addio per i membri',
+                    name: '🎵 Sistema Musicale',
+                    value: '```yaml\nCanali vocali\nPermessi membri\nCode e playlist\n```',
                     inline: true
                 },
                 {
-                    name: '🎵 Musica',
-                    value: 'Imposta canali e permessi musicali',
+                    name: '🛡️ Moderazione Auto',
+                    value: '```yaml\nFiltri parole\nAnti-spam sistema\nLog moderazione\n```',
                     inline: true
                 },
                 {
-                    name: '🛡️ Moderazione',
-                    value: 'Sistema di moderazione e auto-mod',
+                    name: '🎮 Gamification XP',
+                    value: '```yaml\nLivelli e ranks\nRicompense ruoli\nLeaderboard\n```',
                     inline: true
                 },
                 {
-                    name: '🎮 Gamification',
-                    value: 'Livelli, XP e reward per membri attivi',
+                    name: '🎁 Giveaway Manager',
+                    value: '```yaml\nPremi automatici\nPartecipanti\nTimer custom\n```',
                     inline: true
                 },
                 {
-                    name: '🎁 Giveaway',
-                    value: 'Gestione giveaway e premi',
+                    name: '❓ Centro Assistenza',
+                    value: '```yaml\nGuide configurazione\nDocumentazione\nSupporto live\n```',
                     inline: true
                 }
             )
-            .setFooter({
-                text: `Richiesto da ${interaction.user.tag}`,
+            .setFooter({ 
+                text: `Dashboard richiesta da ${interaction.user.tag} • MinfoAi Premium`,
                 iconURL: interaction.user.displayAvatarURL()
             })
             .setTimestamp();
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('setbot_category')
-            .setPlaceholder('🔧 Seleziona una categoria da configurare')
+            .setPlaceholder('🔧 Seleziona una categoria per configurare le impostazioni')
+            .setMinValues(1)
+            .setMaxValues(1)
             .addOptions(
                 {
-                    label: 'Benvenuti',
-                    description: 'Configura i messaggi di benvenuto',
+                    label: 'Messaggi di Benvenuto',
+                    description: 'Configura messaggi e canali per i nuovi membri',
                     value: 'welcome',
                     emoji: '👋'
                 },
                 {
-                    label: 'Addii',
-                    description: 'Configura i messaggi di addio',
+                    label: 'Messaggi di Addio',
+                    description: 'Imposta messaggi quando un membro lascia il server',
                     value: 'goodbye',
                     emoji: '👋'
                 },
                 {
-                    label: 'Musica',
-                    description: 'Imposta le impostazioni musicali',
+                    label: 'Sistema Musicale',
+                    description: 'Configura canali e permessi per la musica',
                     value: 'music',
                     emoji: '🎵'
                 },
                 {
-                    label: 'Moderazione',
-                    description: 'Sistema di moderazione automatica',
+                    label: 'Moderazione Automatica',
+                    description: 'Sistema auto-moderazione e filtri avanzati',
                     value: 'moderation',
                     emoji: '🛡️'
                 },
                 {
-                    label: 'Gamification',
-                    description: 'Sistema livelli e XP',
+                    label: 'Sistema Gamification',
+                    description: 'Livelli, XP, ranks e ricompense per membri',
                     value: 'gamification',
                     emoji: '🎮'
                 },
                 {
-                    label: 'Giveaway',
-                    description: 'Gestisci giveaway e premi',
+                    label: 'Gestione Giveaway',
+                    description: 'Crea e gestisci giveaway con premi automatici',
                     value: 'giveaway',
                     emoji: '🎁'
                 }
@@ -108,12 +116,18 @@ module.exports = {
 
         const helpButton = new ButtonBuilder()
             .setCustomId('setbot_help')
-            .setLabel('Aiuto')
+            .setLabel('Guida & Supporto')
             .setStyle(ButtonStyle.Primary)
             .setEmoji('❓');
 
+        const statusButton = new ButtonBuilder()
+            .setCustomId('setbot_status')
+            .setLabel('Stato Sistema')
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('📊');
+
         const row1 = new ActionRowBuilder().addComponents(selectMenu);
-        const row2 = new ActionRowBuilder().addComponents(refreshButton, helpButton);
+        const row2 = new ActionRowBuilder().addComponents(refreshButton, helpButton, statusButton);
 
         await interaction.reply({
             embeds: [embed],
