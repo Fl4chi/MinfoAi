@@ -3,136 +3,143 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('setbot')
-        .setDescription('🎛️ Dashboard interattiva premium per configurare tutte le funzionalità del bot'),
+        .setDescription('🎛️ Dashboard Premium - Configura tutte le funzionalità del bot con stile moderno'),
     
     async execute(interaction) {
         // Verifica permessi admin
         if (!interaction.member.permissions.has('Administrator')) {
             return interaction.reply({
-                content: '❌ **Accesso Negato** • Solo gli amministratori possono accedere alla dashboard di configurazione.',
+                content: '🚫 **Accesso Negato** • Solo gli amministratori possono accedere alla dashboard premium.',
                 ephemeral: true
             });
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor([88, 101, 242]) // Discord Blurple gradient-ready
             .setAuthor({ 
-                name: '🎛️ Dashboard Configurazione Bot',
-                iconURL: interaction.client.user.displayAvatarURL()
+                name: '🎛️ MinfoAi Premium Dashboard',
+                iconURL: interaction.client.user.displayAvatarURL({ dynamic: true, size: 512 })
             })
+            .setThumbnail('https://cdn.discordapp.com/emojis/940275445603106846.gif') // Bot gear animation
             .setDescription(
-                '> Benvenuto nella **Dashboard Premium** di MinfoAi\n' +
-                '> Seleziona una categoria dal menu per iniziare la configurazione\n\n' +
-                '**📊 Panoramica Configurazione**\n' +
-                '└ Tutte le impostazioni vengono salvate automaticamente nel database'
+                '✨ **Benvenuto nella Dashboard Premium di MinfoAi**\n' +
+                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+                '🎨 **Interfaccia Moderna** • Configura ogni aspetto del bot con eleganza\n' +
+                '⚡ **Salvataggio Automatico** • Tutte le modifiche vengono salvate istantaneamente\n' +
+                '🔧 **Controllo Completo** • Accesso a tutte le funzionalità avanzate\n\n' +
+                '**📋 Seleziona una categoria dal menu per iniziare**'
             )
             .addFields(
                 {
-                    name: '👋 Benvenuti & Addii',
-                    value: '```yaml\nMessaggi personalizzati\nCanali dedicati\nEmbed customizzabili\n```',
+                    name: '🌟 **Welcome & Goodbye System**',
+                    value: '```ansi\n\u001b[36m• Messaggi personalizzati dinamici\n• Canali dedicati con auto-setup\n• Embed con colori gradient\n• Immagini welcome custom```',
                     inline: true
                 },
                 {
-                    name: '🎵 Sistema Musicale',
-                    value: '```yaml\nCanali vocali\nPermessi membri\nCode e playlist\n```',
+                    name: '🎵 **Advanced Music System**',
+                    value: '```ansi\n\u001b[35m• Player con interfaccia touch\n• Queue management avanzato\n• Filters & effects premium\n• Multi-source support```',
                     inline: true
                 },
                 {
-                    name: '🛡️ Moderazione Auto',
-                    value: '```yaml\nFiltri parole\nAnti-spam sistema\nLog moderazione\n```',
+                    name: '🛡️ **Smart Moderation AI**',
+                    value: '```ansi\n\u001b[31m• Auto-mod intelligente\n• Custom word filters\n• Behavior analysis\n• Real-time protection```',
                     inline: true
                 },
                 {
-                    name: '🎮 Gamification XP',
-                    value: '```yaml\nLivelli e ranks\nRicompense ruoli\nLeaderboard\n```',
+                    name: '🏆 **Gamification Engine**',
+                    value: '```ansi\n\u001b[33m• XP system dinamico\n• Achievement unlocks\n• Custom leaderboards\n• Reward automation```',
                     inline: true
                 },
                 {
-                    name: '🎁 Giveaway Manager',
-                    value: '```yaml\nPremi automatici\nPartecipanti\nTimer custom\n```',
+                    name: '🎁 **Giveaway Studio Pro**',
+                    value: '```ansi\n\u001b[32m• Templates professionali\n• Multi-winner support\n• Requirement system\n• Analytics dashboard```',
                     inline: true
                 },
                 {
-                    name: '❓ Centro Assistenza',
-                    value: '```yaml\nGuide configurazione\nDocumentazione\nSupporto live\n```',
+                    name: '🆘 **24/7 Support Hub**',
+                    value: '```ansi\n\u001b[34m• Documentazione live\n• Video tutorials\n• Community support\n• Priority assistance```',
                     inline: true
                 }
             )
             .setFooter({ 
-                text: `Dashboard richiesta da ${interaction.user.tag} • MinfoAi Premium`,
-                iconURL: interaction.user.displayAvatarURL()
+                text: `🚀 Dashboard richiesta da ${interaction.user.globalName || interaction.user.username} • MinfoAi Premium v2.0`,
+                iconURL: interaction.user.displayAvatarURL({ dynamic: true })
             })
             .setTimestamp();
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('setbot_category')
-            .setPlaceholder('🔧 Seleziona una categoria per configurare le impostazioni')
-            .setMinValues(1)
-            .setMaxValues(1)
-            .addOptions(
+            .setPlaceholder('🎯 Scegli una categoria da configurare...')
+            .addOptions([
                 {
-                    label: 'Messaggi di Benvenuto',
-                    description: 'Configura messaggi e canali per i nuovi membri',
+                    label: 'Welcome & Goodbye',
+                    description: 'Configura messaggi di benvenuto e addio',
                     value: 'welcome',
-                    emoji: '👋'
+                    emoji: '🌟'
                 },
                 {
-                    label: 'Messaggi di Addio',
-                    description: 'Imposta messaggi quando un membro lascia il server',
-                    value: 'goodbye',
-                    emoji: '👋'
-                },
-                {
-                    label: 'Sistema Musicale',
-                    description: 'Configura canali e permessi per la musica',
+                    label: 'Music System',
+                    description: 'Imposta il sistema musicale avanzato',
                     value: 'music',
                     emoji: '🎵'
                 },
                 {
-                    label: 'Moderazione Automatica',
-                    description: 'Sistema auto-moderazione e filtri avanzati',
+                    label: 'Moderation',
+                    description: 'Configura la moderazione automatica',
                     value: 'moderation',
                     emoji: '🛡️'
                 },
                 {
-                    label: 'Sistema Gamification',
-                    description: 'Livelli, XP, ranks e ricompense per membri',
+                    label: 'Gamification',
+                    description: 'Sistema XP, livelli e ricompense',
                     value: 'gamification',
-                    emoji: '🎮'
+                    emoji: '🏆'
                 },
                 {
-                    label: 'Gestione Giveaway',
-                    description: 'Crea e gestisci giveaway con premi automatici',
+                    label: 'Giveaway Manager',
+                    description: 'Gestisci giveaway e contest',
                     value: 'giveaway',
                     emoji: '🎁'
+                },
+                {
+                    label: 'Support Center',
+                    description: 'Centro assistenza e documentazione',
+                    value: 'support',
+                    emoji: '🆘'
                 }
+            ]);
+
+        const buttons = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('dashboard_refresh')
+                    .setLabel('Aggiorna')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🔄'),
+                new ButtonBuilder()
+                    .setCustomId('dashboard_stats')
+                    .setLabel('Statistiche')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('📊'),
+                new ButtonBuilder()
+                    .setCustomId('dashboard_backup')
+                    .setLabel('Backup Config')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('💾'),
+                new ButtonBuilder()
+                    .setCustomId('dashboard_help')
+                    .setLabel('Guida')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL('https://github.com/Fl4chi/MinfoAi/wiki')
+                    .setEmoji('❓')
             );
 
-        const refreshButton = new ButtonBuilder()
-            .setCustomId('setbot_refresh')
-            .setLabel('Aggiorna Dashboard')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('🔄');
-
-        const helpButton = new ButtonBuilder()
-            .setCustomId('setbot_help')
-            .setLabel('Guida & Supporto')
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji('❓');
-
-        const statusButton = new ButtonBuilder()
-            .setCustomId('setbot_status')
-            .setLabel('Stato Sistema')
-            .setStyle(ButtonStyle.Success)
-            .setEmoji('📊');
-
-        const row1 = new ActionRowBuilder().addComponents(selectMenu);
-        const row2 = new ActionRowBuilder().addComponents(refreshButton, helpButton, statusButton);
+        const selectRow = new ActionRowBuilder().addComponents(selectMenu);
 
         await interaction.reply({
             embeds: [embed],
-            components: [row1, row2],
-            ephemeral: true
+            components: [selectRow, buttons],
+            ephemeral: false
         });
     }
 };
