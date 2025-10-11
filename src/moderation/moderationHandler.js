@@ -2,14 +2,15 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 /**
  * Moderation Handler - Gestisce le funzionalità di moderazione del bot
- * Include sistemi di automod, filtri parole, log e azioni di moderazione
+ * Include sistemi di automod, filtri parole, log, anti-spam/flood e azioni di moderazione
  */
-
 class ModerationHandler {
   constructor() {
-    this.warnings = new Map(); // Map<guildId, Map<userId, Warning[]>>
-    this.automodFilters = new Map(); // Map<guildId, AutoModConfig>
+    this.warnings = new Map(); // Map<guildId, Map<userId, warnings[]>>
+    this.automodFilters = new Map(); // Map<guildId, automodConfig>
     this.mutedUsers = new Map(); // Map<guildId, Set<userId>>
+    this.spamTracker = new Map(); // Map<userId, messageData[]>
+    this.badWords = ['spam', 'insulto', 'parolaccia']; // Lista parole da filtrare
   }
 
   /**
@@ -22,11 +23,11 @@ class ModerationHandler {
     }
     if (!this.automodFilters.has(guildId)) {
       this.automodFilters.set(guildId, {
-        enabled: false,
-        badWords: [],
-        spamProtection: false,
-        inviteLinks: false,
-        capsFilter: false
+        enabled: true,
+        badWords: this.badWords,
+        spamProtection: true,
+        inviteLinks: true,
+        capsFilter: true
       });
     }
     if (!this.mutedUsers.has(guildId)) {
@@ -35,290 +36,311 @@ class ModerationHandler {
   }
 
   /**
-   * Aggiunge un warn a un utente
+   * Anti-spam/flood protection
+   * @param {Message} message - Il messaggio da controllare
+   * @returns {boolean} - True se è spam
+   */
+  checkSpam(message) {
+    const userId = message.author.id;
+    const now = Date.now();
+    const maxMessages = 5; // Max messaggi
+    const timeWindow = 5000; // in 5 secondi
+
+    if (!this.spamTracker.has(userId)) {
+      this.spamTracker.set(userId, []);
+    }
+
+    const userMessages = this.spamTracker.get(userId);
+    
+    // Rimuovi messaggi vecchi
+    const recentMessages = userMessages.filter(time => now - time < timeWindow);
+    recentMessages.push(now);
+    this.spamTracker.set(userId, recentMessages);
+
+    // Controlla se è spam
+    if (recentMessages.length > maxMessages) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Filtra parole proibite
+   * @param {string} content - Il contenuto da controllare
+   * @param {string} guildId - ID del server
+   * @returns {boolean} - True se contiene parole proibite
+   */
+  checkBadWords(content, guildId) {
+    const config = this.automodFilters.get(guildId);
+    if (!config || !config.enabled) return false;
+
+    const lowerContent = content.toLowerCase();
+    return config.badWords.some(word => lowerContent.includes(word.toLowerCase()));
+  }
+
+  /**
+   * Controlla messaggi con automod
+   * @param {Message} message - Il messaggio da controllare
+   * @returns {Object} - Risultato del controllo
+   */
+  async checkMessage(message) {
+    if (message.author.bot) return { action: 'none' };
+
+    const guildId = message.guild.id;
+    this.initGuild(guildId);
+
+    const config = this.automodFilters.get(guildId);
+    if (!config || !config.enabled) return { action: 'none' };
+
+    // Controlla spam
+    if (config.spamProtection && this.checkSpam(message)) {
+      return { action: 'delete', reason: 'Spam/Flood rilevato' };
+    }
+
+    // Controlla parole proibite
+    if (this.checkBadWords(message.content, guildId)) {
+      return { action: 'delete', reason: 'Parola proibita rilevata' };
+    }
+
+    // Controlla link inviti
+    if (config.inviteLinks && /(discord\.gg|discord\.com\/invite)/i.test(message.content)) {
+      return { action: 'delete', reason: 'Link di invito non autorizzato' };
+    }
+
+    // Controlla CAPS eccessivo
+    if (config.capsFilter) {
+      const capsPercentage = (message.content.replace(/[^A-Z]/g, '').length / message.content.length) * 100;
+      if (message.content.length > 10 && capsPercentage > 70) {
+        return { action: 'delete', reason: 'CAPS eccessivo' };
+      }
+    }
+
+    return { action: 'none' };
+  }
+
+  /**
+   * Aggiunge un warning a un utente
    * @param {string} guildId - ID del server
    * @param {string} userId - ID dell'utente
-   * @param {string} reason - Motivo del warn
+   * @param {string} reason - Motivo del warning
    * @param {string} moderatorId - ID del moderatore
    */
   addWarning(guildId, userId, reason, moderatorId) {
     this.initGuild(guildId);
+
     const guildWarnings = this.warnings.get(guildId);
-    
     if (!guildWarnings.has(userId)) {
       guildWarnings.set(userId, []);
     }
 
-    const warning = {
-      id: Date.now(),
+    const userWarnings = guildWarnings.get(userId);
+    userWarnings.push({
       reason,
       moderatorId,
-      timestamp: new Date(),
-      active: true
-    };
+      timestamp: Date.now()
+    });
 
-    guildWarnings.get(userId).push(warning);
-    return {
-      success: true,
-      warning,
-      totalWarnings: guildWarnings.get(userId).filter(w => w.active).length
-    };
+    this.logModAction(guildId, 'warning', userId, moderatorId, reason);
+    return userWarnings.length;
   }
 
   /**
-   * Rimuove un warn da un utente
+   * Ottiene i warning di un utente
    * @param {string} guildId - ID del server
    * @param {string} userId - ID dell'utente
-   * @param {number} warningId - ID del warn
+   * @returns {Array} - Lista dei warning
    */
-  removeWarning(guildId, userId, warningId) {
+  getWarnings(guildId, userId) {
     this.initGuild(guildId);
     const guildWarnings = this.warnings.get(guildId);
-    
-    if (!guildWarnings.has(userId)) {
-      return { success: false, message: 'Utente non ha warn' };
-    }
+    return guildWarnings.get(userId) || [];
+  }
 
+  /**
+   * Rimuove un warning da un utente
+   * @param {string} guildId - ID del server
+   * @param {string} userId - ID dell'utente
+   * @param {number} index - Indice del warning da rimuovere
+   */
+  removeWarning(guildId, userId, index) {
+    this.initGuild(guildId);
+    const guildWarnings = this.warnings.get(guildId);
     const userWarnings = guildWarnings.get(userId);
-    const warning = userWarnings.find(w => w.id === warningId);
 
-    if (!warning) {
-      return { success: false, message: 'Warn non trovato' };
+    if (userWarnings && userWarnings[index]) {
+      userWarnings.splice(index, 1);
+      return true;
     }
-
-    warning.active = false;
-    return { success: true, message: 'Warn rimosso' };
+    return false;
   }
 
   /**
-   * Ottiene i warn di un utente
-   * @param {string} guildId - ID del server
+   * Ban utente
+   * @param {Guild} guild - Il server
    * @param {string} userId - ID dell'utente
+   * @param {string} reason - Motivo del ban
+   * @param {string} moderatorId - ID del moderatore
    */
-  getUserWarnings(guildId, userId) {
-    this.initGuild(guildId);
-    const guildWarnings = this.warnings.get(guildId);
-    
-    if (!guildWarnings.has(userId)) {
-      return [];
+  async banUser(guild, userId, reason, moderatorId) {
+    try {
+      await guild.members.ban(userId, { reason });
+      this.logModAction(guild.id, 'ban', userId, moderatorId, reason);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-
-    return guildWarnings.get(userId).filter(w => w.active);
   }
 
   /**
-   * Pulisce tutti i warn di un utente
-   * @param {string} guildId - ID del server
+   * Kick utente
+   * @param {Guild} guild - Il server
    * @param {string} userId - ID dell'utente
+   * @param {string} reason - Motivo del kick
+   * @param {string} moderatorId - ID del moderatore
    */
-  clearWarnings(guildId, userId) {
-    this.initGuild(guildId);
-    const guildWarnings = this.warnings.get(guildId);
-    
-    if (!guildWarnings.has(userId)) {
-      return { success: false, message: 'Utente non ha warn' };
+  async kickUser(guild, userId, reason, moderatorId) {
+    try {
+      const member = await guild.members.fetch(userId);
+      await member.kick(reason);
+      this.logModAction(guild.id, 'kick', userId, moderatorId, reason);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-
-    const warnings = guildWarnings.get(userId);
-    warnings.forEach(w => w.active = false);
-    return { success: true, message: 'Warn puliti', count: warnings.length };
   }
 
   /**
-   * Crea un embed con i warn di un utente
-   * @param {Object} user - Utente Discord
-   * @param {string} guildId - ID del server
+   * Mute utente (timeout)
+   * @param {Guild} guild - Il server
+   * @param {string} userId - ID dell'utente
+   * @param {number} duration - Durata in millisecondi
+   * @param {string} reason - Motivo del mute
+   * @param {string} moderatorId - ID del moderatore
    */
-  getWarningsEmbed(user, guildId) {
-    const warnings = this.getUserWarnings(guildId, user.id);
-
-    const embed = new EmbedBuilder()
-      .setTitle(`⚠️ Warn di ${user.tag}`)
-      .setThumbnail(user.displayAvatarURL())
-      .setColor(warnings.length === 0 ? '#00ff00' : '#ff0000')
-      .addFields(
-        { name: 'Warn Totali', value: warnings.length.toString(), inline: true },
-        { name: 'Utente', value: `<@${user.id}>`, inline: true }
-      );
-
-    if (warnings.length > 0) {
-      const warningsList = warnings.map((w, i) => 
-        `**${i + 1}.** ${w.reason}\n*Moderatore:* <@${w.moderatorId}> - *Data:* ${w.timestamp.toLocaleDateString()}*`
-      ).join('\n\n');
+  async muteUser(guild, userId, duration, reason, moderatorId) {
+    try {
+      const member = await guild.members.fetch(userId);
+      await member.timeout(duration, reason);
       
-      embed.addFields({ name: 'Lista Warn', value: warningsList.substring(0, 1024) });
-    }
+      const guildMuted = this.mutedUsers.get(guild.id);
+      guildMuted.add(userId);
 
-    return embed;
+      this.logModAction(guild.id, 'mute', userId, moderatorId, reason);
+
+      // Auto-unmute dopo durata
+      setTimeout(() => {
+        guildMuted.delete(userId);
+      }, duration);
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 
   /**
-   * Configura l'automod per un server
-   * @param {string} guildId - ID del server
-   * @param {Object} config - Configurazione automod
+   * Unmute utente
+   * @param {Guild} guild - Il server
+   * @param {string} userId - ID dell'utente
+   * @param {string} moderatorId - ID del moderatore
    */
-  setAutoModConfig(guildId, config) {
+  async unmuteUser(guild, userId, moderatorId) {
+    try {
+      const member = await guild.members.fetch(userId);
+      await member.timeout(null);
+
+      const guildMuted = this.mutedUsers.get(guild.id);
+      guildMuted.delete(userId);
+
+      this.logModAction(guild.id, 'unmute', userId, moderatorId, 'Unmute');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Comando staff /me - Messaggio come bot con crediti
+   * @param {Message} message - Il messaggio originale
+   * @param {string} content - Il contenuto da inviare
+   */
+  async staffMe(message, content) {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+      return { success: false, error: 'Permessi insufficienti' };
+    }
+
+    try {
+      const embed = new EmbedBuilder()
+        .setDescription(content)
+        .setFooter({ text: `Inviato da ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+        .setColor('#5865F2')
+        .setTimestamp();
+
+      await message.channel.send({ embeds: [embed] });
+      await message.delete();
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Log azione di moderazione
+   * @param {string} guildId - ID del server
+   * @param {string} action - Tipo di azione
+   * @param {string} userId - ID dell'utente
+   * @param {string} moderatorId - ID del moderatore
+   * @param {string} reason - Motivo
+   */
+  logModAction(guildId, action, userId, moderatorId, reason) {
+    console.log(`[MODERATION] ${guildId} | ${action.toUpperCase()} | User: ${userId} | Mod: ${moderatorId} | Reason: ${reason}`);
+    
+    // Qui si può implementare il salvataggio su database o invio a canale log
+  }
+
+  /**
+   * Configura i filtri automod
+   * @param {string} guildId - ID del server
+   * @param {Object} config - Configurazione
+   */
+  setAutomodConfig(guildId, config) {
     this.initGuild(guildId);
     const currentConfig = this.automodFilters.get(guildId);
     this.automodFilters.set(guildId, { ...currentConfig, ...config });
-    return { success: true, message: 'Configurazione automod aggiornata' };
   }
 
   /**
-   * Ottiene la configurazione automod
+   * Aggiunge parola alla blacklist
    * @param {string} guildId - ID del server
+   * @param {string} word - Parola da aggiungere
    */
-  getAutoModConfig(guildId) {
-    this.initGuild(guildId);
-    return this.automodFilters.get(guildId);
-  }
-
-  /**
-   * Controlla un messaggio con i filtri automod
-   * @param {Object} message - Messaggio Discord
-   */
-  async checkMessage(message) {
-    if (!message.guild) return { filtered: false };
-
-    const guildId = message.guild.id;
+  addBadWord(guildId, word) {
     this.initGuild(guildId);
     const config = this.automodFilters.get(guildId);
-
-    if (!config.enabled) return { filtered: false };
-
-    const content = message.content.toLowerCase();
-    let reason = null;
-
-    // Controllo parole vietate
-    if (config.badWords && config.badWords.length > 0) {
-      for (const word of config.badWords) {
-        if (content.includes(word.toLowerCase())) {
-          reason = 'Parola vietata rilevata';
-          break;
-        }
-      }
+    if (!config.badWords.includes(word)) {
+      config.badWords.push(word);
+      return true;
     }
-
-    // Controllo invite links
-    if (config.inviteLinks && (content.includes('discord.gg/') || content.includes('discord.com/invite/'))) {
-      reason = 'Link di invito rilevato';
-    }
-
-    // Controllo caps
-    if (config.capsFilter && content.length > 10) {
-      const capsCount = (content.match(/[A-Z]/g) || []).length;
-      if (capsCount / content.length > 0.7) {
-        reason = 'Troppo caps';
-      }
-    }
-
-    if (reason) {
-      try {
-        await message.delete();
-        return { filtered: true, reason };
-      } catch (error) {
-        console.error('Errore nella cancellazione del messaggio:', error);
-        return { filtered: false, error: error.message };
-      }
-    }
-
-    return { filtered: false };
+    return false;
   }
 
   /**
-   * Muta un utente (placeholder - richiede implementazione con timeout)
+   * Rimuove parola dalla blacklist
    * @param {string} guildId - ID del server
-   * @param {string} userId - ID dell'utente
-   * @param {number} duration - Durata in minuti
+   * @param {string} word - Parola da rimuovere
    */
-  muteUser(guildId, userId, duration) {
+  removeBadWord(guildId, word) {
     this.initGuild(guildId);
-    this.mutedUsers.get(guildId).add(userId);
-
-    // Placeholder - implementazione futura con timeout di Discord
-    setTimeout(() => {
-      this.unmuteUser(guildId, userId);
-    }, duration * 60 * 1000);
-
-    return { success: true, message: `Utente mutato per ${duration} minuti` };
-  }
-
-  /**
-   * Smuta un utente
-   * @param {string} guildId - ID del server
-   * @param {string} userId - ID dell'utente
-   */
-  unmuteUser(guildId, userId) {
-    this.initGuild(guildId);
-    const mutedSet = this.mutedUsers.get(guildId);
-    
-    if (!mutedSet.has(userId)) {
-      return { success: false, message: 'Utente non è mutato' };
+    const config = this.automodFilters.get(guildId);
+    const index = config.badWords.indexOf(word);
+    if (index > -1) {
+      config.badWords.splice(index, 1);
+      return true;
     }
-
-    mutedSet.delete(userId);
-    return { success: true, message: 'Utente smutato' };
-  }
-
-  /**
-   * Verifica se un utente è mutato
-   * @param {string} guildId - ID del server
-   * @param {string} userId - ID dell'utente
-   */
-  isMuted(guildId, userId) {
-    this.initGuild(guildId);
-    return this.mutedUsers.get(guildId).has(userId);
-  }
-
-  /**
-   * Crea un log di moderazione (placeholder)
-   * @param {Object} guild - Server Discord
-   * @param {string} action - Azione eseguita
-   * @param {Object} target - Target dell'azione
-   * @param {Object} moderator - Moderatore
-   * @param {string} reason - Motivo
-   */
-  async logModAction(guild, action, target, moderator, reason) {
-    // Placeholder - implementazione futura con canale log configurabile
-    const logData = {
-      action,
-      target: target.tag || target.id,
-      moderator: moderator.tag || moderator.id,
-      reason,
-      timestamp: new Date()
-    };
-
-    console.log('Mod Action:', logData);
-    return { success: true, logged: true };
-  }
-
-  /**
-   * Ottiene statistiche di moderazione
-   * @param {string} guildId - ID del server
-   */
-  getStats(guildId) {
-    this.initGuild(guildId);
-    const guildWarnings = this.warnings.get(guildId);
-    const mutedUsers = this.mutedUsers.get(guildId);
-
-    let totalWarnings = 0;
-    let usersWithWarnings = 0;
-
-    guildWarnings.forEach((warnings) => {
-      const activeWarnings = warnings.filter(w => w.active);
-      if (activeWarnings.length > 0) {
-        usersWithWarnings++;
-        totalWarnings += activeWarnings.length;
-      }
-    });
-
-    return {
-      totalWarnings,
-      usersWithWarnings,
-      mutedUsers: mutedUsers.size,
-      automodEnabled: this.automodFilters.get(guildId).enabled
-    };
+    return false;
   }
 }
 
-module.exports = new ModerationHandler();
+module.exports = ModerationHandler;
