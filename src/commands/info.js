@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const User = require('../database/models/User');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,36 +11,56 @@ module.exports = {
         .setDescription('L\'utente di cui visualizzare le informazioni')
         .setRequired(false)
     ),
+
   async execute(interaction) {
     try {
       const targetUser = interaction.options.getUser('utente') || interaction.user;
       const member = interaction.guild?.members.cache.get(targetUser.id);
       
-      // Dati base garantiti
+      // Dati base garantiti da Discord
       const accountCreated = Math.floor(targetUser.createdTimestamp / 1000);
       const joinedServer = member ? Math.floor(member.joinedTimestamp / 1000) : null;
       
-      // TODO: Database - questi saranno recuperati dal database
+      // Recupera dati reali dal database
+      let userData = await User.findOne({
+        userId: targetUser.id,
+        guildId: interaction.guild.id
+      });
+      
+      // Se l'utente non esiste nel database, crea un nuovo record con valori di default
+      if (!userData) {
+        userData = await User.create({
+          userId: targetUser.id,
+          guildId: interaction.guild.id,
+          xp: 0,
+          level: 1,
+          messageCount: 0,
+          lastLogin: new Date(),
+          preferences: {
+            language: 'IT',
+            notifications: true,
+            theme: 'default'
+          },
+          interests: [],
+          warnings: 0,
+          achievements: []
+        });
+      }
+      
+      // Prepara i dati per la visualizzazione
       const userStats = {
-        messageCount: 0, // Placeholder - da database
-        level: 1, // Placeholder - da database
-        xp: 0, // Placeholder - da database
-        lastLogin: null, // Placeholder - da database
-        activityTime: 'Non disponibile', // Placeholder - orario attività
+        messageCount: userData.messageCount || 0,
+        level: userData.level || 1,
+        xp: userData.xp || 0,
+        lastLogin: userData.lastLogin ? Math.floor(new Date(userData.lastLogin).getTime() / 1000) : null,
         preferences: {
-          theme: 'Non impostato', // Placeholder
-          notifications: 'Attive', // Placeholder
-          language: 'IT', // Placeholder
-          privacy: 'Pubblico' // Placeholder
+          theme: userData.preferences?.theme || 'Non impostato',
+          notifications: userData.preferences?.notifications ? 'Attive' : 'Disattivate',
+          language: userData.preferences?.language || 'IT'
         },
-        interests: [
-          'Gaming', // Placeholder - da database
-          'Programmazione',
-          'Musica'
-        ],
-        reputation: 0, // Placeholder - da database
-        warnings: 0, // Placeholder - da database
-        achievements: [] // Placeholder - da database
+        interests: userData.interests || [],
+        warnings: userData.warnings || 0,
+        achievements: userData.achievements || []
       };
       
       const embed = new EmbedBuilder()
@@ -60,31 +81,29 @@ module.exports = {
             inline: false
           },
           {
-            name: '📈 Statistiche Attività',
+            name: '📈 Statistiche Server',
             value: [
-              `**Numero Messaggi:** ${userStats.messageCount.toLocaleString()} (Placeholder)`,
-              `**Livello XP:** ${userStats.level} (${userStats.xp} XP) (Placeholder)`,
-              `**Orario Attività:** ${userStats.activityTime} (Placeholder)`,
-              `**Reputazione:** ${userStats.reputation > 0 ? '+' : ''}${userStats.reputation}`,
-              `**Avvertimenti:** ${userStats.warnings}`,
-              userStats.lastLogin ? `**Ultimo Login:** <t:${userStats.lastLogin}:R>` : '**Ultimo Login:** Mai'
+              `**Livello:** ${userStats.level}`,
+              `**XP:** ${userStats.xp}`,
+              `**Messaggi Inviati:** ${userStats.messageCount}`,
+              userStats.lastLogin ? `**Ultimo Accesso:** <t:${userStats.lastLogin}:R>` : '**Ultimo Accesso:** Mai',
+              `**Warnings:** ${userStats.warnings}`
             ].join('\n'),
-            inline: false
+            inline: true
           },
           {
-            name: '🎯 Gusti e Interessi',
-            value: userStats.interests.length > 0 
+            name: '🎯 Interessi',
+            value: userStats.interests.length > 0
               ? userStats.interests.map(i => `• ${i}`).join('\n')
               : 'Nessun interesse registrato',
             inline: true
           },
           {
-            name: '⚙️ Preferenze (Placeholder)',
+            name: '⚙️ Preferenze',
             value: [
               `**Tema:** ${userStats.preferences.theme}`,
               `**Notifiche:** ${userStats.preferences.notifications}`,
-              `**Lingua:** ${userStats.preferences.language}`,
-              `**Privacy:** ${userStats.preferences.privacy}`
+              `**Lingua:** ${userStats.preferences.language}`
             ].join('\n'),
             inline: true
           }
@@ -116,7 +135,7 @@ module.exports = {
       
       embed
         .setFooter({
-          text: `Richiesto da ${interaction.user.username} • Dati aggiornati`,
+          text: `Richiesto da ${interaction.user.username} • Dati dal database`,
           iconURL: interaction.user.displayAvatarURL({ dynamic: true })
         })
         .setTimestamp();
