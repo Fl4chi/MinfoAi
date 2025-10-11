@@ -1,10 +1,40 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 
+// Utility: check and present required Discord OAuth scopes and intents for verification flow
+const REQUIRED_PERMISSIONS = {
+  bot: [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.EmbedLinks,
+    PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.ManageRoles
+  ]
+};
+
+const REQUIRED_USER_SCOPES = [
+  // App authorization scopes needed when using external site/OAuth (documented in README)
+  'identify',          // username, avatar, discriminator, user id
+  'guilds',            // list of servers the user is in ("sapere server")
+  'guilds.members.read'// member info in target guild (nick, roles, pending, joined_at, premium, flags)
+  // 'guilds.join'      // join servers (only if we invite users to a hub via OAuth)
+];
+
+function hasBotPermsInChannel(channel) {
+  const me = channel.guild.members.me;
+  if (!me) return false;
+  const perms = channel.permissionsFor(me);
+  return perms && REQUIRED_PERMISSIONS.bot.every(p => perms.has(p));
+}
+
 module.exports = {
   async handleVerification(interaction) {
     const guildId = interaction.guildId;
     const config = interaction.client.guildConfigs.get(guildId) || {};
     const verificationConfig = config.verification || {};
+
+    // Live bot permission diagnostics in the configured verification channel
+    const channel = verificationConfig.channelId ? interaction.guild.channels.cache.get(verificationConfig.channelId) : null;
+    const botPermsOk = channel ? hasBotPermsInChannel(channel) : false;
 
     const embed = new EmbedBuilder()
       .setTitle('⚙️ Configurazione Verifica')
@@ -15,7 +45,8 @@ module.exports = {
         { name: 'Canale Verifica', value: verificationConfig.channelId ? `<#${verificationConfig.channelId}>` : 'Non configurato', inline: true },
         { name: 'Ruolo Verificato', value: verificationConfig.roleId ? `<@&${verificationConfig.roleId}>` : 'Non configurato', inline: true },
         { name: 'Tipo Verifica', value: verificationConfig.type || 'button', inline: true },
-        { name: 'Messaggio Personalizzato', value: verificationConfig.customMessage ? 'Configurato' : 'Non configurato', inline: true }
+        { name: 'Messaggio Personalizzato', value: verificationConfig.customMessage ? 'Configurato' : 'Non configurato', inline: true },
+        { name: 'Permessi Bot (canale verifica)', value: channel ? (botPermsOk ? '✅ OK' : '❌ Mancano permessi: ViewChannel, SendMessages, EmbedLinks, ReadMessageHistory, ManageRoles') : '—', inline: false }
       )
       .setFooter({ text: 'Usa i pulsanti qui sotto per configurare la verifica' });
 
@@ -80,7 +111,6 @@ module.exports = {
   async handleVerificationConfig(interaction) {
     const selectedOption = interaction.values[0];
     const guildId = interaction.guildId;
-
     switch(selectedOption) {
       case 'verification_toggle':
         await this.toggleVerification(interaction, guildId);
@@ -106,10 +136,8 @@ module.exports = {
   async toggleVerification(interaction, guildId) {
     const config = interaction.client.guildConfigs.get(guildId) || {};
     if (!config.verification) config.verification = {};
-    
     config.verification.enabled = !config.verification.enabled;
     interaction.client.guildConfigs.set(guildId, config);
-
     await interaction.reply({
       content: `✅ Sistema di verifica ${config.verification.enabled ? 'attivato' : 'disattivato'}!`,
       ephemeral: true
@@ -139,7 +167,6 @@ module.exports = {
       .addOptions(channels);
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
-
     await interaction.reply({
       content: '📢 Seleziona il canale dove verrà inviato il messaggio di verifica:',
       components: [row],
@@ -170,7 +197,6 @@ module.exports = {
       .addOptions(roles);
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
-
     await interaction.reply({
       content: '👤 Seleziona il ruolo da assegnare ai membri verificati:',
       components: [row],
@@ -191,7 +217,6 @@ module.exports = {
       .addOptions(types);
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
-
     await interaction.reply({
       content: '⚙️ Seleziona il tipo di verifica:',
       components: [row],
@@ -228,6 +253,14 @@ module.exports = {
     if (!channel) {
       return await interaction.reply({
         content: '❌ Il canale configurato non esiste più!',
+        ephemeral: true
+      });
+    }
+
+    // Check bot permissions in channel before sending
+    if (!hasBotPermsInChannel(channel)) {
+      return await interaction.reply({
+        content: '❌ Permessi insufficienti nel canale di verifica. Richiesti: ViewChannel, SendMessages, EmbedLinks, ReadMessageHistory, ManageRoles',
         ephemeral: true
       });
     }
@@ -277,6 +310,15 @@ module.exports = {
     if (!role) {
       return await interaction.reply({
         content: '❌ Il ruolo configurato non esiste più!',
+        ephemeral: true
+      });
+    }
+
+    // Validate we can manage this role
+    const me = interaction.guild.members.me;
+    if (!me || me.roles.highest.comparePositionTo(role) <= 0) {
+      return await interaction.reply({
+        content: '❌ Il bot non può assegnare questo ruolo. Sposta il ruolo del bot più in alto e abilita "Gestire ruoli".',
         ephemeral: true
       });
     }
