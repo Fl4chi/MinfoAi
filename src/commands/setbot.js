@@ -36,52 +36,54 @@ module.exports = {
                     inline: true
                 },
                 {
-                    name: '🎵 **Advanced Music System**',
-                    value: '```ansi\n\u001b[35m• Player con interfaccia touch\n• Queue management avanzato\n• Filters & effects premium\n• Multi-source support```',
-                    inline: true
-                },
-                {
-                    name: '🛡️ **Smart Moderation AI**',
-                    value: '```ansi\n\u001b[31m• Auto-mod intelligente\n• Custom word filters\n• Behavior analysis\n• Real-time protection```',
+                    name: '🛡️ **Moderation Suite**',
+                    value: '```ansi\n\u001b[33m• Auto-mod intelligente\n• Log completo azioni\n• Sistema warn avanzato\n• Gestione tempban/permban```',
                     inline: true
                 },
                 {
                     name: '🏆 **Gamification Engine**',
-                    value: '```ansi\n\u001b[33m• XP system dinamico\n• Achievement unlocks\n• Custom leaderboards\n• Reward automation```',
+                    value: '```ansi\n\u001b[32m• Sistema XP multicanale\n• Livelli con role rewards\n• Leaderboard dinamica\n• Achievement system```',
                     inline: true
                 },
                 {
-                    name: '🎁 **Giveaway Studio Pro**',
-                    value: '```ansi\n\u001b[32m• Templates professionali\n• Multi-winner support\n• Requirement system\n• Analytics dashboard```',
+                    name: '🎁 **Giveaway Manager**',
+                    value: '```ansi\n\u001b[35m• Contest automatizzati\n• Regole personalizzabili\n• Estrazione random verificata\n• Notifiche vincitori```',
                     inline: true
                 },
                 {
-                    name: '🆘 **24/7 Support Hub**',
-                    value: '```ansi\n\u001b[34m• Documentazione live\n• Video tutorials\n• Community support\n• Priority assistance```',
+                    name: '🆘 **Support Center**',
+                    value: '```ansi\n\u001b[34m• Ticket system professionale\n• FAQ dinamiche\n• Documentazione integrata\n• Supporto multilingua```',
+                    inline: true
+                },
+                {
+                    name: '⚙️ **System Status**',
+                    value: '```yaml\nUptime: 99.99%\nLatency: <50ms\nDatabase: ✅ Online\nBackup: ✅ Attivo```',
                     inline: true
                 }
             )
             .setFooter({ 
-                text: `🚀 Dashboard richiesta da ${interaction.user.globalName || interaction.user.username} • MinfoAi Premium v2.0`,
+                text: `Richiesto da ${interaction.user.tag} • MinfoAi v3.0 Premium Edition`,
                 iconURL: interaction.user.displayAvatarURL({ dynamic: true })
             })
             .setTimestamp();
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('setbot_category')
-            .setPlaceholder('🎯 Scegli una categoria da configurare...')
-            .addOptions([
+            .setCustomId('dashboard_category')
+            .setPlaceholder('📂 Seleziona una categoria da configurare')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions(
                 {
-                    label: 'Welcome & Goodbye',
-                    description: 'Configura messaggi di benvenuto e addio',
+                    label: 'Welcome System',
+                    description: 'Configura messaggi di benvenuto',
                     value: 'welcome',
-                    emoji: '🌟'
+                    emoji: '👋'
                 },
                 {
-                    label: 'Music System',
-                    description: 'Imposta il sistema musicale avanzato',
-                    value: 'music',
-                    emoji: '🎵'
+                    label: 'Goodbye System',
+                    description: 'Configura messaggi di addio',
+                    value: 'goodbye',
+                    emoji: '👋'
                 },
                 {
                     label: 'Moderation',
@@ -107,7 +109,7 @@ module.exports = {
                     value: 'support',
                     emoji: '🆘'
                 }
-            ]);
+            );
 
         const buttons = new ActionRowBuilder()
             .addComponents(
@@ -127,7 +129,6 @@ module.exports = {
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('💾'),
                 new ButtonBuilder()
-                    .setCustomId('dashboard_help')
                     .setLabel('Guida')
                     .setStyle(ButtonStyle.Link)
                     .setURL('https://github.com/Fl4chi/MinfoAi/wiki')
