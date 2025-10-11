@@ -1,9 +1,7 @@
 # MinfoAi
-
 MinfoAi è un bot Discord intelligente e completo con AI proprietaria, moderazione avanzata, gamification, musica, giveaway, verifica avanzata e sistemi custom di gestione errori.
 
 ## ✨ Caratteristiche Principali
-
 ### 🎨 Design Premium con Embed Messages
 MinfoAi utilizza esclusivamente **messaggi embed premium** per tutte le comunicazioni del bot:
 - 🖼️ **Estetica Moderna**: Design professionale con colori accesi e layout curato
@@ -13,7 +11,6 @@ MinfoAi utilizza esclusivamente **messaggi embed premium** per tutte le comunica
 - 🎯 **Branding Consistente**: Identità visiva MinfoAi in tutti i messaggi
 
 ## 📂 Struttura del Progetto
-
 ### File Principali
 ```
 MinfoAi/
@@ -42,131 +39,52 @@ MinfoAi/
 │       └── musicHandler.js       # Player musica Discord
 ├── scripts/                      # Script utility
 ├── .env.example                  # Template variabili ambiente
-├── package.json                  # Dipendenze Node.js
-└── start-bot.bat                 # Script avvio Windows
 ```
 
-## 🚀 Funzionalità
+## 🔐 Verifica Utenti (Dashboard Setbot)
+La verifica è gestita dalla dashboard Setbot (interactions/setbot/verification.js) e dall'handler eventi (events/verificationHandler.js). Il flusso è pensato per garantire la sicurezza e il rispetto dei permessi.
 
-### 1. **Sistema Eventi Discord**
-- **Welcome/Goodbye Messages**: Messaggi embed personalizzati per nuovi membri e membri che lasciano
-- **Interaction Handler**: Gestione completa di slash commands, buttons, select menus
-- **Member Management**: Tracking automatico entrate/uscite membri
-- **Giveaway System**: Sistema completo per gestione giveaway con handler dedicato
-- **Verification System**: Verifica avanzata membri con sistema anti-bot
+### Permessi Richiesti
+Per funzionare correttamente, il bot e (se usato OAuth esterno) l'utente devono consentire i seguenti permessi:
 
-### 2. **Comandi Slash**
-- `/info` - Profiling dettagliato utente con statistiche e informazioni
-- `/setbot` - Dashboard moderna per configurazione bot (UI/UX premium)
+- Permessi BOT (nel canale di verifica):
+  - ViewChannel (Vedere canali)
+  - SendMessages (Inviare messaggi)
+  - EmbedLinks (Inserire link incorporati)
+  - ReadMessageHistory (Leggere cronologia messaggi)
+  - ManageRoles (Gestire ruoli) — necessario per assegnare il ruolo verificato
 
-### 3. **Gamification**
-- Sistema livelli ed esperienza (XP)
-- Ricompense automatiche per attività
-- Classifiche e statistiche utente
-- Badge e achievement personalizzati
+- Scopes OAuth Utente (se si usa un flusso web esterno per la verifica):
+  - identify — accesso a username, avatar, discriminator, user id
+  - guilds — elenco server dell’utente (sapere server)
+  - guilds.members.read — leggere info membro (nick, ruoli, joined_at, pending, nitro, flags)
+  - (opzionale) guilds.join — per far unire l’utente a un server tramite OAuth, se previsto
 
-### 4. **Moderazione Avanzata**
-- Auto-moderazione messaggi
-- Sistema warn/kick/ban
-- Logging azioni moderazione
-- Filtri contenuti personalizzabili
+Nota: Di default la verifica tramite bottone dentro Discord non usa OAuth esterno; i campi utente (username, avatar) sono letti tramite l’oggetto `interaction.member/user`.
 
-### 5. **Sistema Musica**
-- Player musica integrato
-- Queue management
-- Controlli interattivi (play/pause/skip)
-- Supporto multiple piattaforme
+### Flusso di Verifica
+1. Configurazione da dashboard Setbot:
+   - Abilitazione sistema verifica
+   - Selezione canale di verifica
+   - Selezione ruolo “Verificato” da assegnare
+   - Scelta tipo (bottone/captcha/reazione) — default bottone
+   - Invio messaggio di verifica nel canale selezionato
+2. Il bot esegue un controllo permessi nel canale di verifica e mostra diagnostica in dashboard se mancano permessi.
+3. L’utente clicca “Verifica” nel messaggio:
+   - Il bot controlla che il ruolo esista e che possa gestirlo (gerarchia ruoli + ManageRoles)
+   - Il bot assegna il ruolo configurato all’utente
+   - Messaggio di conferma in DM/ephemeral
+4. Log opzionali e messaggi di benvenuto sono gestiti dall’handler eventi.
 
-## 🛠️ Installazione
+### Validazioni e Sicurezza
+- Controllo permessi bot nel canale di verifica prima dell’invio del pannello
+- Controllo gerarchia ruoli e permesso ManageRoles prima di assegnare il ruolo
+- Diagnostica in dashboard: indica se mancano permessi chiave nel canale
+- Gestione errori con messaggi chiari e localizzati in italiano
 
-1. **Clona il repository**
-   ```bash
-   git clone https://github.com/Fl4chi/MinfoAi.git
-   cd MinfoAi
-   ```
+### Troubleshooting
+- “Mancano permessi: ViewChannel/SendMessages/EmbedLinks/ReadMessageHistory/ManageRoles”
+  - Soluzione: Verifica i permessi del bot sul canale di verifica e che il ruolo del bot sia sopra il ruolo “Verificato”.
+- “Il bot non può assegnare questo ruolo”
+  - Soluzione: Alza il ruolo del bot sopra il ruolo da assegnare e abilita “Gestire ruoli”.
 
-2. **Installa le dipendenze**
-   ```bash
-   npm install
-   ```
-
-3. **Configura le variabili d'ambiente**
-   ```bash
-   cp .env.example .env
-   # Modifica .env con i tuoi token e configurazioni
-   ```
-
-4. **Avvia il bot**
-   ```bash
-   # Linux/Mac
-   npm start
-   
-   # Windows
-   start-bot.bat
-   ```
-
-## ⚙️ Configurazione
-
-Modifica il file `.env` con le seguenti variabili:
-```env
-DISCORD_TOKEN=your_bot_token_here
-CLIENT_ID=your_client_id_here
-GUILD_ID=your_guild_id_here
-# Aggiungi altre configurazioni necessarie
-```
-
-## 📦 Dipendenze Principali
-
-- `discord.js` - Libreria Discord bot
-- `@discordjs/voice` - Sistema audio/musica
-- `dotenv` - Gestione variabili ambiente
-- Altri package specificati in `package.json`
-
-## 🗑️ Note di Cleanup
-
-### Directory Vuote da Rimuovere
-Le seguenti directory contengono solo file `.gitkeep` e possono essere eliminate:
-- `src/database/` - Non attualmente utilizzata
-- `src/errors/` - Non attualmente utilizzata
-- `src/giveaway/` - Funzionalità gestita da event handler
-- `src/logs/` - Non attualmente utilizzata
-- `src/utils/` - Non attualmente utilizzata
-- `src/verification/` - Funzionalità gestita da event handler
-
-### File .gitkeep da Rimuovere
-I file `.gitkeep` sono utilizzati per mantenere directory vuote in Git ma non sono necessari quando le directory contengono file reali:
-- `src/.gitkeep`
-- `src/commands/.gitkeep`
-- `src/events/.gitkeep`
-- `src/gamification/.gitkeep`
-- `src/moderation/.gitkeep`
-- `src/music/.gitkeep`
-
-## 📝 Sviluppo
-
-### Aggiungere Nuovi Comandi
-1. Crea file in `src/commands/nomecomando.js`
-2. Implementa logica comando
-3. Il bot registrerà automaticamente il comando
-
-### Aggiungere Nuovi Event Handler
-1. Crea file in `src/events/nomeevent.js`
-2. Esporta funzione handler
-3. Il bot caricherà automaticamente l'event
-
-## 🤝 Contribuire
-
-Contributi, issues e feature requests sono benvenuti!
-
-## 📄 Licenza
-
-Questo progetto è sviluppato da Fl4chi.
-
-## 🔗 Link Utili
-
-- [Discord.js Documentation](https://discord.js.org/)
-- [Discord Developer Portal](https://discord.com/developers/applications)
-
----
-
-**MinfoAi** - Bot Discord Intelligente con AI Proprietaria 🤖✨
