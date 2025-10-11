@@ -1,13 +1,54 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 /**
  * Music Handler - Gestisce le funzionalità musicali del bot
- * Placeholder per future implementazioni di riproduzione musicale
+ * Include: setup canale musica, comando /play, impostazioni DJ, volume e limiti coda
  */
-
 class MusicHandler {
   constructor() {
-    this.queues = new Map(); // Map<guildId, Queue>
+    this.queues = new Map(); // Map<guildId, queue>
+    this.musicChannels = new Map(); // Map<guildId, channelId>
+    this.djRoles = new Map(); // Map<guildId, roleId>
+    this.maxQueueSize = 50; // Limite massimo coda
+  }
+
+  /**
+   * Imposta il canale musica per un server
+   * @param {string} guildId - ID del server
+   * @param {string} channelId - ID del canale vocale
+   */
+  setupMusicChannel(guildId, channelId) {
+    this.musicChannels.set(guildId, channelId);
+    return true;
+  }
+
+  /**
+   * Ottiene il canale musica configurato
+   * @param {string} guildId - ID del server
+   */
+  getMusicChannel(guildId) {
+    return this.musicChannels.get(guildId);
+  }
+
+  /**
+   * Imposta il ruolo DJ per un server
+   * @param {string} guildId - ID del server
+   * @param {string} roleId - ID del ruolo DJ
+   */
+  setDJRole(guildId, roleId) {
+    this.djRoles.set(guildId, roleId);
+    return true;
+  }
+
+  /**
+   * Verifica se un utente ha i permessi DJ
+   * @param {GuildMember} member - Membro del server
+   * @param {string} guildId - ID del server
+   */
+  hasDJPermission(member, guildId) {
+    const djRole = this.djRoles.get(guildId);
+    if (!djRole) return true; // Se non c'è ruolo DJ, tutti possono usare i comandi
+    return member.roles.cache.has(djRole) || member.permissions.has(PermissionFlagsBits.Administrator);
   }
 
   /**
@@ -37,12 +78,18 @@ class MusicHandler {
   }
 
   /**
-   * Aggiunge una canzone alla coda
+   * Aggiunge una canzone alla coda con controllo limiti
    * @param {string} guildId - ID del server
    * @param {Object} song - Dati della canzone
    */
   addToQueue(guildId, song) {
     const queue = this.initQueue(guildId);
+    
+    // Controllo limite coda
+    if (queue.songs.length >= this.maxQueueSize) {
+      throw new Error(`La coda ha raggiunto il limite massimo di ${this.maxQueueSize} canzoni`);
+    }
+    
     queue.songs.push(song);
     return queue.songs.length;
   }
@@ -61,7 +108,120 @@ class MusicHandler {
   }
 
   /**
-   * Pulisce la coda
+   * Imposta il volume per un server
+   * @param {string} guildId - ID del server
+   * @param {number} volume - Volume (0-100)
+   */
+  setVolume(guildId, volume) {
+    const queue = this.getQueue(guildId);
+    if (!queue) return false;
+    
+    // Limita il volume tra 0 e 100
+    volume = Math.max(0, Math.min(100, volume));
+    queue.volume = volume;
+    
+    // Aggiorna il volume del player se sta riproducendo
+    if (queue.player && queue.playing) {
+      queue.player.volume = volume / 100;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Ottiene il volume corrente
+   * @param {string} guildId - ID del server
+   */
+  getVolume(guildId) {
+    const queue = this.getQueue(guildId);
+    return queue ? queue.volume : 50;
+  }
+
+  /**
+   * Comando /play - Riproduce una canzone
+   * @param {Interaction} interaction - Interazione Discord
+   * @param {string} query - Query di ricerca o URL
+   */
+  async handlePlayCommand(interaction, query) {
+    const member = interaction.member;
+    const guildId = interaction.guildId;
+    
+    // Verifica permessi DJ
+    if (!this.hasDJPermission(member, guildId)) {
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor('#FF0000')
+          .setDescription('❌ Non hai i permessi DJ per usare questo comando!')],
+        ephemeral: true
+      });
+    }
+    
+    // Verifica che l'utente sia in un canale vocale
+    const voiceChannel = member.voice.channel;
+    if (!voiceChannel) {
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor('#FF0000')
+          .setDescription('❌ Devi essere in un canale vocale per riprodurre musica!')],
+        ephemeral: true
+      });
+    }
+    
+    // Verifica il canale musica configurato (se presente)
+    const musicChannelId = this.getMusicChannel(guildId);
+    if (musicChannelId && voiceChannel.id !== musicChannelId) {
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor('#FF0000')
+          .setDescription(`❌ Puoi riprodurre musica solo nel canale <#${musicChannelId}>!`)],
+        ephemeral: true
+      });
+    }
+    
+    try {
+      // Inizializza la coda
+      const queue = this.initQueue(guildId);
+      
+      // Crea oggetto canzone (placeholder - richiederebbe integrazione con API musica)
+      const song = {
+        title: query,
+        url: query,
+        duration: '0:00',
+        requester: member.user.tag
+      };
+      
+      // Aggiungi alla coda
+      const position = this.addToQueue(guildId, song);
+      
+      const embed = new EmbedBuilder()
+        .setColor('#00FF00')
+        .setTitle('🎵 Canzone aggiunta alla coda')
+        .setDescription(`**${song.title}**`)
+        .addFields(
+          { name: 'Richiesta da', value: song.requester, inline: true },
+          { name: 'Posizione', value: position.toString(), inline: true }
+        );
+      
+      await interaction.reply({ embeds: [embed] });
+      
+      // Se non sta già riproducendo, inizia la riproduzione
+      if (!queue.playing) {
+        // Placeholder per avviare la riproduzione
+        // Richiederebbe integrazione con discord-player o simili
+      }
+      
+    } catch (error) {
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor('#FF0000')
+          .setDescription(`❌ Errore: ${error.message}`)],
+        ephemeral: true
+      });
+    }
+  }
+
+  /**
+   * Pulisce la coda di un server
    * @param {string} guildId - ID del server
    */
   clearQueue(guildId) {
@@ -73,163 +233,11 @@ class MusicHandler {
   }
 
   /**
-   * Riproduce una canzone (placeholder)
+   * Rimuove completamente la coda di un server
    * @param {string} guildId - ID del server
    */
-  async play(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue || queue.songs.length === 0) {
-      return { success: false, message: 'Nessuna canzone in coda' };
-    }
-
-    // Placeholder - implementazione futura con @discordjs/voice
-    queue.playing = true;
-    return { success: true, message: 'Riproduzione avviata (placeholder)' };
-  }
-
-  /**
-   * Mette in pausa la riproduzione (placeholder)
-   * @param {string} guildId - ID del server
-   */
-  pause(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue || !queue.playing) {
-      return { success: false, message: 'Nessuna riproduzione in corso' };
-    }
-
-    queue.playing = false;
-    return { success: true, message: 'Riproduzione in pausa' };
-  }
-
-  /**
-   * Riprende la riproduzione (placeholder)
-   * @param {string} guildId - ID del server
-   */
-  resume(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue) {
-      return { success: false, message: 'Nessuna coda trovata' };
-    }
-
-    queue.playing = true;
-    return { success: true, message: 'Riproduzione ripresa' };
-  }
-
-  /**
-   * Salta alla prossima canzone (placeholder)
-   * @param {string} guildId - ID del server
-   */
-  skip(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue || queue.songs.length === 0) {
-      return { success: false, message: 'Nessuna canzone da saltare' };
-    }
-
-    if (!queue.loop) {
-      queue.songs.shift();
-    }
-    return { success: true, message: 'Canzone saltata' };
-  }
-
-  /**
-   * Ferma la riproduzione e pulisce la coda
-   * @param {string} guildId - ID del server
-   */
-  stop(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue) {
-      return { success: false, message: 'Nessuna riproduzione da fermare' };
-    }
-
-    this.clearQueue(guildId);
-    queue.connection = null;
-    queue.player = null;
+  deleteQueue(guildId) {
     this.queues.delete(guildId);
-    return { success: true, message: 'Riproduzione fermata' };
-  }
-
-  /**
-   * Imposta il volume (placeholder)
-   * @param {string} guildId - ID del server
-   * @param {number} volume - Volume (0-100)
-   */
-  setVolume(guildId, volume) {
-    const queue = this.getQueue(guildId);
-    if (!queue) {
-      return { success: false, message: 'Nessuna coda trovata' };
-    }
-
-    if (volume < 0 || volume > 100) {
-      return { success: false, message: 'Volume deve essere tra 0 e 100' };
-    }
-
-    queue.volume = volume;
-    return { success: true, message: `Volume impostato a ${volume}%` };
-  }
-
-  /**
-   * Attiva/disattiva il loop
-   * @param {string} guildId - ID del server
-   */
-  toggleLoop(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue) {
-      return { success: false, message: 'Nessuna coda trovata' };
-    }
-
-    queue.loop = !queue.loop;
-    return { success: true, message: `Loop ${queue.loop ? 'attivato' : 'disattivato'}` };
-  }
-
-  /**
-   * Crea un embed con la coda corrente
-   * @param {string} guildId - ID del server
-   */
-  getQueueEmbed(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue || queue.songs.length === 0) {
-      return new EmbedBuilder()
-        .setTitle('🎵 Coda Musicale')
-        .setDescription('La coda è vuota')
-        .setColor('#ff0000');
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle('🎵 Coda Musicale')
-      .setColor('#00ff00')
-      .addFields(
-        { name: 'In Riproduzione', value: queue.songs[0]?.title || 'Nessuna', inline: false },
-        { name: 'Volume', value: `${queue.volume}%`, inline: true },
-        { name: 'Loop', value: queue.loop ? '✅ Attivo' : '❌ Disattivo', inline: true },
-        { name: 'Stato', value: queue.playing ? '▶️ In Riproduzione' : '⏸️ In Pausa', inline: true }
-      );
-
-    if (queue.songs.length > 1) {
-      const upcoming = queue.songs.slice(1, 6).map((song, i) => `${i + 1}. ${song.title}`).join('\n');
-      embed.addFields({ name: 'Prossime Canzoni', value: upcoming || 'Nessuna', inline: false });
-    }
-
-    return embed;
-  }
-
-  /**
-   * Mischia la coda
-   * @param {string} guildId - ID del server
-   */
-  shuffle(guildId) {
-    const queue = this.getQueue(guildId);
-    if (!queue || queue.songs.length <= 1) {
-      return { success: false, message: 'Non ci sono abbastanza canzoni da mischiare' };
-    }
-
-    const currentSong = queue.songs.shift();
-    for (let i = queue.songs.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [queue.songs[i], queue.songs[j]] = [queue.songs[j], queue.songs[i]];
-    }
-    queue.songs.unshift(currentSong);
-
-    return { success: true, message: 'Coda mischiata' };
   }
 }
 
