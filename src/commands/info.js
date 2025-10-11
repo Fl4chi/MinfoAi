@@ -10,21 +10,14 @@ module.exports = {
         .setDescription('L\'utente di cui visualizzare le informazioni')
         .setRequired(false)
     ),
+
   async execute(interaction) {
     try {
       const targetUser = interaction.options.getUser('utente') || interaction.user;
-      const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
       
-      if (!member) {
-        return await interaction.reply({
-          content: '❌ Utente non trovato nel server.',
-          ephemeral: true
-        });
-      }
-
+      // Dati garantiti senza fetch
       const accountCreated = Math.floor(targetUser.createdTimestamp / 1000);
-      const joinedServer = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
-
+      
       const embed = new EmbedBuilder()
         .setColor('#7289DA')
         .setTitle(`📊 Profilo di ${targetUser.username}`)
@@ -36,8 +29,7 @@ module.exports = {
               `**ID:** ${targetUser.id}`,
               `**Username:** ${targetUser.username}`,
               `**Tag:** ${targetUser.tag}`,
-              `**Creazione Account:** <t:${accountCreated}:F> (<t:${accountCreated}:R>)`,
-              joinedServer ? `**Entrato nel Server:** <t:${joinedServer}:F> (<t:${joinedServer}:R>)` : '**Entrato nel Server:** N/A'
+              `**Creazione Account:** <t:${accountCreated}:F> (<t:${accountCreated}:R>)`
             ].join('\n'),
             inline: false
           }
@@ -49,12 +41,16 @@ module.exports = {
         .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
+
     } catch (error) {
       console.error('Errore nel comando info:', error);
-      await interaction.reply({
-        content: '❌ Si è verificato un errore durante il recupero delle informazioni.',
-        ephemeral: true
-      });
+      const errorMsg = '❌ Si è verificato un errore durante il recupero delle informazioni.';
+      
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: errorMsg, ephemeral: true });
+      } else {
+        await interaction.reply({ content: errorMsg, ephemeral: true });
+      }
     }
   }
 };
