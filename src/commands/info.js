@@ -10,7 +10,6 @@ module.exports = {
         .setDescription('L\'utente di cui visualizzare le informazioni')
         .setRequired(false)
     ),
-
   async execute(interaction) {
     try {
       const targetUser = interaction.options.getUser('utente') || interaction.user;
@@ -26,10 +25,12 @@ module.exports = {
         level: 1, // Placeholder - da database
         xp: 0, // Placeholder - da database
         lastLogin: null, // Placeholder - da database
+        activityTime: 'Non disponibile', // Placeholder - orario attività
         preferences: {
-          theme: 'Non impostato',
-          notifications: 'Attive',
-          language: 'IT'
+          theme: 'Non impostato', // Placeholder
+          notifications: 'Attive', // Placeholder
+          language: 'IT', // Placeholder
+          privacy: 'Pubblico' // Placeholder
         },
         interests: [
           'Gaming', // Placeholder - da database
@@ -49,11 +50,11 @@ module.exports = {
           {
             name: '👤 Informazioni Base',
             value: [
-              `**ID:** ${targetUser.id}`,
+              `**ID Utente:** ${targetUser.id}`,
               `**Username:** ${targetUser.username}`,
               `**Tag:** ${targetUser.tag}`,
               `**Bot:** ${targetUser.bot ? 'Sì' : 'No'}`,
-              `**Creazione Account:** <t:${accountCreated}:F> (<t:${accountCreated}:R>)`,
+              `**Data Creazione Account:** <t:${accountCreated}:F> (<t:${accountCreated}:R>)`,
               joinedServer ? `**Entrato nel Server:** <t:${joinedServer}:F> (<t:${joinedServer}:R>)` : ''
             ].filter(Boolean).join('\n'),
             inline: false
@@ -61,11 +62,12 @@ module.exports = {
           {
             name: '📈 Statistiche Attività',
             value: [
-              `**Messaggi Inviati:** ${userStats.messageCount.toLocaleString()}`,
-              `**Livello:** ${userStats.level} (${userStats.xp} XP)`,
+              `**Numero Messaggi:** ${userStats.messageCount.toLocaleString()} (Placeholder)`,
+              `**Livello XP:** ${userStats.level} (${userStats.xp} XP) (Placeholder)`,
+              `**Orario Attività:** ${userStats.activityTime} (Placeholder)`,
               `**Reputazione:** ${userStats.reputation > 0 ? '+' : ''}${userStats.reputation}`,
               `**Avvertimenti:** ${userStats.warnings}`,
-              userStats.lastLogin ? `**Ultimo Login:** <t:${Math.floor(userStats.lastLogin / 1000)}:R>` : '**Ultimo Login:** Mai'
+              userStats.lastLogin ? `**Ultimo Login:** <t:${userStats.lastLogin}:R>` : '**Ultimo Login:** Mai'
             ].join('\n'),
             inline: false
           },
@@ -77,11 +79,12 @@ module.exports = {
             inline: true
           },
           {
-            name: '⚙️ Preferenze',
+            name: '⚙️ Preferenze (Placeholder)',
             value: [
               `**Tema:** ${userStats.preferences.theme}`,
               `**Notifiche:** ${userStats.preferences.notifications}`,
-              `**Lingua:** ${userStats.preferences.language}`
+              `**Lingua:** ${userStats.preferences.language}`,
+              `**Privacy:** ${userStats.preferences.privacy}`
             ].join('\n'),
             inline: true
           }
