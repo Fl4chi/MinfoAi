@@ -1,37 +1,32 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ChannelType, ComponentType } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setbot')
-    .setDescription('🏛️ Dashboard Premium — Configura il bot con interfaccia moderna'),
-
+    .setDescription('🏛️ Dashboard — Configura il bot con interfaccia moderna (solo UI, no DB)')
+    ,
   async execute(interaction) {
-    // Check: in guild only
     if (!interaction.inGuild?.()) {
       return interaction.reply({ content: '🏠 Usa questo comando in un server.', ephemeral: true });
     }
-
-    // Check: admin only
     if (!interaction.member?.permissions?.has('Administrator')) {
       return interaction.reply({ content: '🚫 Accesso negato: servono permessi Amministratore.', ephemeral: true });
     }
 
-    // Temporary state storage for the session
+    // Stato temporaneo SOLO per la sessione corrente (placeholder, niente DB)
     const state = {
       category: 'overview',
-      sub: null,
       config: {
-        welcome: { enabled: false, channel: null, message: 'Benvenuto {user} in {server}!', preview: true },
-        goodbye: { enabled: false, channel: null, message: 'Addio {user}.', preview: true },
+        welcome: { enabled: false, channel: null, image: null, message: 'Benvenuto {user} in {server}!' },
+        goodbye: { enabled: false, channel: null, image: null, message: 'Addio {user}.' },
         music: { enabled: true, djRole: null, autoplay: false },
-        moderation: { automod: true, logs: null, warns: {}, tempPunish: true },
+        moderation: { automod: true, logs: null },
         gamification: { xp: true, multiplier: 1, rewardsRoleMap: {} },
         giveaway: { hostRole: null, logs: null, dmWinners: true },
-        verify: { enabled: false, role: null, channel: null, mode: 'button' }
+        verify: { enabled: false, role: null, channel: null, mode: 'button' },
       }
     };
 
-    // Helpers
     const categoryLabels = {
       overview: '📊 Panoramica',
       welcome: '👋 Benvenuto',
@@ -40,18 +35,21 @@ module.exports = {
       moderation: '🛡️ Moderazione',
       gamification: '🏆 Gamification',
       giveaway: '🎁 Giveaway',
-      verify: '✅ Verifica'
+      verify: '✅ Verifica',
     };
 
     const buildOverview = () => {
-      const lines = Object.entries(state.config).map(([key, value]) => {
-        const enabled = typeof value.enabled === 'boolean' ? (value.enabled ? 'On' : 'Off') : '—';
-        return `• ${categoryLabels[key] || key}: ${enabled}`;
-      }).join('\n');
+      const lines = Object.entries(state.config)
+        .map(([key, value]) => {
+          const enabled = typeof value.enabled === 'boolean' ? (value.enabled ? 'On' : 'Off') : '—';
+          return `• ${categoryLabels[key] || key}: ${enabled}`;
+        })
+        .join('\n');
+
       return new EmbedBuilder()
         .setColor([88,101,242])
-        .setAuthor({ name: '🏛️ MinfoAi Premium Dashboard', iconURL: interaction.client.user.displayAvatarURL({ size: 512 }) })
-        .setDescription('Configura tutte le funzioni con menu a schede, anteprima e salvataggio istantaneo.')
+        .setAuthor({ name: '🏛️ MinfoAi Dashboard', iconURL: interaction.client.user.displayAvatarURL({ size: 128 }) })
+        .setDescription('Configura le funzioni con menu, anteprima e salvataggio fittizio (nessun DB).')
         .addFields({ name: 'Stato rapido', value: '```\n' + lines + '\n```' })
         .setFooter({ text: `Richiesto da ${interaction.user.username}` })
         .setTimestamp();
@@ -60,146 +58,166 @@ module.exports = {
     const buildCategoryEmbed = (key) => {
       const base = new EmbedBuilder().setColor([88,101,242]).setTitle(`${categoryLabels[key]} — Impostazioni`);
       const cfg = state.config[key];
-      switch (key) {
-        case 'welcome':
-        case 'goodbye': {
-          base.setDescription('Personalizza canale, messaggio ed anteprima in tempo reale.\nPlaceholders: {user}, {server}, {memberCount}');
-          base.addFields(
-            { name: 'Stato', value: cfg.enabled ? 'Abilitato' : 'Disabilitato', inline: true },
-            { name: 'Canale', value: cfg.channel ? `<#${cfg.channel}>` : 'Nessuno', inline: true },
-            { name: 'Messaggio', value: '```' + cfg.message + '```' }
-          );
-          if (cfg.preview) {
-            const previewText = cfg.message
-              .replaceAll('{user}', interaction.user.toString())
-              .replaceAll('{server}', interaction.guild.name)
-              .replaceAll('{memberCount}', String(interaction.guild.memberCount ?? ''));
-            base.addFields({ name: 'Anteprima', value: '```' + previewText + '```' });
-          }
-          break;
-        }
-        case 'music': {
-          base.addFields(
-            { name: 'Stato', value: cfg.autoplay ? 'Autoplay On' : 'Autoplay Off', inline: true },
-            { name: 'DJ Role', value: cfg.djRole ? `<@&${cfg.djRole}>` : 'Nessun ruolo', inline: true }
-          );
-          break;
-        }
-        case 'moderation': {
-          base.addFields(
-            { name: 'AutoMod', value: cfg.automod ? 'On' : 'Off', inline: true },
-            { name: 'Log', value: cfg.logs ? `<#${cfg.logs}>` : 'Nessun canale', inline: true },
-            { name: 'TempPunizioni', value: cfg.tempPunish ? 'Abilitate' : 'Disabilitate', inline: true }
-          );
-          break;
-        }
-        case 'gamification': {
-          base.addFields(
-            { name: 'XP', value: cfg.xp ? 'Attivo' : 'Disattivo', inline: true },
-            { name: 'Moltiplicatore', value: String(cfg.multiplier), inline: true },
-            { name: 'Ricompense ruolo', value: Object.keys(cfg.rewardsRoleMap).length ? Object.entries(cfg.rewardsRoleMap).map(([lvl, role]) => `Lvl ${lvl} → <@&${role}>`).join('\n') : 'Nessuna' }
-          );
-          break;
-        }
-        case 'giveaway': {
-          base.addFields(
-            { name: 'Ruolo Host', value: cfg.hostRole ? `<@&${cfg.hostRole}>` : 'Nessun ruolo', inline: true },
-            { name: 'Log', value: cfg.logs ? `<#${cfg.logs}>` : 'Nessun canale', inline: true },
-            { name: 'DM Vincitori', value: cfg.dmWinners ? 'On' : 'Off', inline: true }
-          );
-          break;
-        }
-        case 'verify': {
-          base.addFields(
-            { name: 'Stato', value: cfg.enabled ? 'Abilitata' : 'Disabilitata', inline: true },
-            { name: 'Ruolo', value: cfg.role ? `<@&${cfg.role}>` : 'Nessun ruolo', inline: true },
-            { name: 'Canale', value: cfg.channel ? `<#${cfg.channel}>` : 'Nessun canale', inline: true },
-            { name: 'Metodo', value: cfg.mode === 'button' ? 'Bottone' : 'Captcha', inline: true }
-          );
-          break;
-        }
+
+      if (key === 'welcome' || key === 'goodbye') {
+        base.addFields(
+          { name: 'Stato', value: cfg.enabled ? 'Abilitato' : 'Disabilitato', inline: true },
+          { name: 'Canale', value: cfg.channel ? `<#${cfg.channel}>` : 'Nessuno', inline: true },
+          { name: 'Immagine', value: cfg.image ? cfg.image : 'Nessuna', inline: true },
+          { name: 'Messaggio', value: '```' + (cfg.message || '-') + '```' }
+        );
+      }
+      if (key === 'music') {
+        base.addFields(
+          { name: 'Stato', value: cfg.enabled ? 'Abilitato' : 'Disabilitato', inline: true },
+          { name: 'DJ Role', value: cfg.djRole ? `<@&${cfg.djRole}>` : 'Nessuno', inline: true },
+          { name: 'Autoplay', value: cfg.autoplay ? 'On' : 'Off', inline: true },
+        );
+      }
+      if (key === 'moderation') {
+        base.addFields(
+          { name: 'AutoMod', value: cfg.automod ? 'On' : 'Off', inline: true },
+          { name: 'Log Channel', value: cfg.logs ? `<#${cfg.logs}>` : 'Nessuno', inline: true },
+        );
+      }
+      if (key === 'verify') {
+        base.addFields(
+          { name: 'Stato', value: cfg.enabled ? 'Abilitato' : 'Disabilitato', inline: true },
+          { name: 'Ruolo', value: cfg.role ? `<@&${cfg.role}>` : 'Nessuno', inline: true },
+          { name: 'Canale', value: cfg.channel ? `<#${cfg.channel}>` : 'Nessuno', inline: true },
+          { name: 'Modalità', value: cfg.mode || 'button', inline: true },
+        );
       }
       return base;
     };
 
-    const mainSelect = new StringSelectMenuBuilder()
-      .setCustomId('db-main')
-      .setPlaceholder('Seleziona una categoria…')
-      .addOptions(
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.overview).setValue('overview').setEmoji('📊'),
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.welcome).setValue('welcome').setEmoji('👋'),
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.goodbye).setValue('goodbye').setEmoji('👋'),
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.music).setValue('music').setEmoji('🎵'),
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.moderation).setValue('moderation').setEmoji('🛡️'),
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.gamification).setValue('gamification').setEmoji('🏆'),
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.giveaway).setValue('giveaway').setEmoji('🎁'),
-        new StringSelectMenuOptionBuilder().setLabel(categoryLabels.verify).setValue('verify').setEmoji('✅')
-      );
-
+    // Menu categoria principale
     const navRow = () => new ActionRowBuilder().addComponents(
-      mainSelect
+      new StringSelectMenuBuilder()
+        .setCustomId('db-category')
+        .setPlaceholder('Seleziona categoria')
+        .addOptions(
+          ...Object.entries(categoryLabels).map(([value, label]) => (
+            new StringSelectMenuOptionBuilder().setLabel(label).setValue(value)
+          ))
+        )
+    );
+
+    // UI dinamica: canali, ruoli, immagini (placeholder)
+    const channelOptions = interaction.guild.channels.cache
+      .filter(c => [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(c.type))
+      .first(25)
+      .map(c => ({ label: `#${c.name}`.slice(0, 100), value: c.id }));
+
+    const roleOptions = interaction.guild.roles.cache
+      .filter(r => r.editable && !r.managed)
+      .sort((a,b) => b.position - a.position)
+      .first(25)
+      .map(r => ({ label: r.name.slice(0, 100), value: r.id }));
+
+    const imagePresets = [
+      { label: '🎉 Festoso', value: 'preset_party' },
+      { label: '🌙 Notturno', value: 'preset_dark' },
+      { label: '🌈 Colorato', value: 'preset_color' },
+      { label: '🧊 Minimal', value: 'preset_minimal' },
+    ];
+
+    const buildControlsRow1 = () => new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('db-channel')
+        .setPlaceholder('Seleziona canale')
+        .addOptions(channelOptions),
+      new StringSelectMenuBuilder()
+        .setCustomId('db-role')
+        .setPlaceholder('Seleziona ruolo')
+        .addOptions(roleOptions)
+    );
+
+    const buildControlsRow2 = () => new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('db-image')
+        .setPlaceholder('Seleziona immagine/preset')
+        .addOptions(imagePresets),
     );
 
     const actionRow = () => new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('db-back').setLabel('Indietro').setStyle(ButtonStyle.Secondary).setEmoji('⬅️'),
-      new ButtonBuilder().setCustomId('db-save').setLabel('Salva').setStyle(ButtonStyle.Success).setEmoji('💾'),
       new ButtonBuilder().setCustomId('db-preview').setLabel('Anteprima').setStyle(ButtonStyle.Primary).setEmoji('🖼️'),
       new ButtonBuilder().setCustomId('db-reset').setLabel('Reset').setStyle(ButtonStyle.Danger).setEmoji('♻️'),
-      new ButtonBuilder().setLabel('Wiki').setStyle(ButtonStyle.Link).setURL('https://github.com/Fl4chi/MinfoAi/wiki').setEmoji('📚')
+      new ButtonBuilder().setLabel('Wiki').setStyle(ButtonStyle.Link).setURL('https://github.com/Fl4chi/MinfoAi/wiki').setEmoji('📚'),
     );
 
+    const currentEmbed = buildOverview();
     const msg = await interaction.reply({
-      embeds: [buildOverview()],
-      components: [navRow(), actionRow()],
-      ephemeral: true
+      embeds: [currentEmbed],
+      components: [navRow(), buildControlsRow1(), buildControlsRow2(), actionRow()],
+      ephemeral: true,
     });
 
-    const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 15 * 60_000 });
+    const buttonCollector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 15 * 60_000 });
     const selectCollector = msg.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 15 * 60_000 });
 
-    selectCollector.on('collect', async (i) => {
+    selectCollector.on('collect', async i => {
       if (i.user.id !== interaction.user.id) return i.reply({ content: '❌ Solo il richiedente può usare questa dashboard.', ephemeral: true });
+
+      if (i.customId === 'db-category') {
+        const value = i.values?.[0];
+        state.category = value || 'overview';
+        const embed = state.category === 'overview' ? buildOverview() : buildCategoryEmbed(state.category);
+        return i.update({ embeds: [embed], components: [navRow(), buildControlsRow1(), buildControlsRow2(), actionRow()] });
+      }
+
+      // Gestione select di canali/ruoli/immagini in base alla categoria
       const val = i.values?.[0];
-      state.category = val;
-      const embed = val === 'overview' ? buildOverview() : buildCategoryEmbed(val);
-      await i.update({ embeds: [embed], components: [navRow(), actionRow()] });
+      const key = state.category;
+      if (!state.config[key]) return i.deferUpdate();
+
+      if (i.customId === 'db-channel') {
+        if (key === 'welcome' || key === 'goodbye' || key === 'moderation' || key === 'verify' || key === 'giveaway') {
+          if (key === 'moderation') state.config.moderation.logs = val; else state.config[key].channel = val;
+        }
+      }
+      if (i.customId === 'db-role') {
+        if (key === 'music') state.config.music.djRole = val;
+        if (key === 'giveaway') state.config.giveaway.hostRole = val;
+        if (key === 'verify') state.config.verify.role = val;
+      }
+      if (i.customId === 'db-image') {
+        if (key === 'welcome' || key === 'goodbye') state.config[key].image = val; // solo placeholder
+      }
+
+      const embed = key === 'overview' ? buildOverview() : buildCategoryEmbed(key);
+      return i.update({ embeds: [embed], components: [navRow(), buildControlsRow1(), buildControlsRow2(), actionRow()] });
     });
 
-    collector.on('collect', async (i) => {
+    buttonCollector.on('collect', async i => {
       if (i.user.id !== interaction.user.id) return i.reply({ content: '❌ Solo il richiedente può usare questa dashboard.', ephemeral: true });
-      if (i.customId === 'db-back') {
-        state.category = 'overview';
-        return i.update({ embeds: [buildOverview()], components: [navRow(), actionRow()] });
-      }
+
       if (i.customId === 'db-preview') {
         const emb = state.category === 'overview' ? buildOverview() : buildCategoryEmbed(state.category);
         return i.reply({ content: 'Anteprima aggiornata.', embeds: [emb], ephemeral: true });
       }
       if (i.customId === 'db-reset') {
-        // soft reset of current category settings
         const key = state.category;
-        if (state.config[key]) {
-          switch (key) {
-            case 'welcome': state.config[key] = { enabled: false, channel: null, message: 'Benvenuto {user} in {server}!', preview: true }; break;
-            case 'goodbye': state.config[key] = { enabled: false, channel: null, message: 'Addio {user}.', preview: true }; break;
-            case 'music': state.config[key] = { enabled: true, djRole: null, autoplay: false }; break;
-            case 'moderation': state.config[key] = { automod: true, logs: null, warns: {}, tempPunish: true }; break;
-            case 'gamification': state.config[key] = { xp: true, multiplier: 1, rewardsRoleMap: {} }; break;
-            case 'giveaway': state.config[key] = { hostRole: null, logs: null, dmWinners: true }; break;
-            case 'verify': state.config[key] = { enabled: false, role: null, channel: null, mode: 'button' }; break;
-          }
+        switch (key) {
+          case 'welcome': state.config.welcome = { enabled: false, channel: null, image: null, message: 'Benvenuto {user} in {server}!' }; break;
+          case 'goodbye': state.config.goodbye = { enabled: false, channel: null, image: null, message: 'Addio {user}.' }; break;
+          case 'music': state.config.music = { enabled: true, djRole: null, autoplay: false }; break;
+          case 'moderation': state.config.moderation = { automod: true, logs: null }; break;
+          case 'gamification': state.config.gamification = { xp: true, multiplier: 1, rewardsRoleMap: {} }; break;
+          case 'giveaway': state.config.giveaway = { hostRole: null, logs: null, dmWinners: true }; break;
+          case 'verify': state.config.verify = { enabled: false, role: null, channel: null, mode: 'button' }; break;
+          default: break;
         }
-        const emb = state.category === 'overview' ? buildOverview() : buildCategoryEmbed(state.category);
-        return i.update({ embeds: [emb], components: [navRow(), actionRow()] });
-      }
-      if (i.customId === 'db-save') {
-        // Here you would persist to your database. This demo only confirms.
-        return i.reply({ content: '✅ Impostazioni salvate (demo). Integrare persistenza nel database.', ephemeral: true });
+        const emb = key === 'overview' ? buildOverview() : buildCategoryEmbed(key);
+        return i.update({ embeds: [emb], components: [navRow(), buildControlsRow1(), buildControlsRow2(), actionRow()] });
       }
     });
 
-    collector.on('end', async () => {
+    const endAll = async () => {
       try { await msg.edit({ components: [] }); } catch {}
-    });
+    };
+
+    buttonCollector.on('end', endAll);
+    selectCollector.on('end', endAll);
   }
 };
