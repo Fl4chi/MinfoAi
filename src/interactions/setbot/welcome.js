@@ -56,9 +56,14 @@ module.exports = {
         }
         
         try {
-            // Carica config attuale
-            const config = await GuildConfig.findOne({ guildId: interaction.guild.id }) || {};
-            const welcomeConfig = config.welcome || {};
+            // Carica config attuale usando il nuovo modello GuildConfig
+            const config = await GuildConfig.get(interaction.guild.id);
+            const welcomeChannelId = config.welcomeChannelId || null;
+            const welcomeMessage = config.welcomeMessage || null;
+            const welcomeEnabled = config.welcomeEnabled || false;
+            const autoRoleId = config.autoroles?.[0] || null;
+            const imageEnabled = config.welcomeImageEnabled || false;
+            const embedColor = config.welcomeEmbedColor || '#00FF7F';
             
             // Check permessi bot
             const botMember = interaction.guild.members.me;
@@ -87,12 +92,12 @@ module.exports = {
                     {
                         name: '📊 Stato Corrente',
                         value: `\`\`\`\n` +
-                            `Sistema: ${welcomeConfig.enabled ? '🟢 ATTIVO' : '🔴 DISATTIVATO'}\n` +
-                            `Canale: ${welcomeConfig.channelId ? '<#' + welcomeConfig.channelId + '>' : '❌ Non impostato'}\n` +
-                            `Messaggio: ${welcomeConfig.message ? 'Personalizzato' : 'Default'}\n` +
-                            `Ruolo Auto: ${welcomeConfig.autoRoleId ? '<@&' + welcomeConfig.autoRoleId + '>' : '❌ Disabilitato'}\n` +
-                            `Immagine: ${welcomeConfig.imageEnabled ? '✅ Abilitata' : '❌ Disabilitata'}\n` +
-                            `Colore Embed: ${welcomeConfig.embedColor || '#00FF7F (default)'}\n` +
+                            `Sistema: ${welcomeEnabled ? '🟢 ATTIVO' : '🔴 DISATTIVATO'}\n` +
+                            `Canale: ${welcomeChannelId ? '<#' + welcomeChannelId + '>' : '❌ Non impostato'}\n` +
+                            `Messaggio: ${welcomeMessage ? 'Personalizzato' : 'Default'}\n` +
+                            `Ruolo Auto: ${autoRoleId ? '<@&' + autoRoleId + '>' : '❌ Disabilitato'}\n` +
+                            `Immagine: ${imageEnabled ? '✅ Abilitata' : '❌ Disabilitata'}\n` +
+                            `Colore Embed: ${embedColor || '#00FF7F (default)'}\n` +
                             `\`\`\``,
                         inline: false
                     },
@@ -104,7 +109,7 @@ module.exports = {
                         inline: false
                     }
                 ],
-                welcomeConfig.embedColor || '#00FF7F',
+                embedColor,
                 'welcome'
             );
             
@@ -189,16 +194,16 @@ module.exports = {
             // Pulsanti azione principali
             const toggleButton = new ButtonBuilder()
                 .setCustomId('welcome_toggle')
-                .setLabel(welcomeConfig.enabled ? 'Disabilita Sistema' : 'Abilita Sistema')
-                .setStyle(welcomeConfig.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
-                .setEmoji(welcomeConfig.enabled ? '🔴' : '🟢');
+                .setLabel(welcomeEnabled ? 'Disabilita Sistema' : 'Abilita Sistema')
+                .setStyle(welcomeEnabled ? ButtonStyle.Danger : ButtonStyle.Success)
+                .setEmoji(welcomeEnabled ? '🔴' : '🟢');
             
             const previewButton = new ButtonBuilder()
                 .setCustomId('welcome_preview')
                 .setLabel('Anteprima')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('👁️')
-                .setDisabled(!welcomeConfig.channelId || !canSendMessages);
+                .setDisabled(!welcomeChannelId || !canSendMessages);
             
             const saveButton = new ButtonBuilder()
                 .setCustomId('welcome_save')
