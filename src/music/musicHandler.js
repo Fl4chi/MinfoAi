@@ -1,93 +1,112 @@
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const db = require('../database/db');
 
 /**
- * Music Handler - Gestisce le funzionalità musicali del bot
- * Include: setup canale musica, comando /play, impostazioni DJ, volume e limiti coda
+ * Music Handler - Manages music functionality with MongoDB config persistence
+ * Queue management remains in-memory (ephemeral), settings are persisted
  */
 class MusicHandler {
   constructor() {
-    this.queues = new Map(); // Map<guildId, queue>
-    this.musicChannels = new Map(); // Map<guildId, channelId>
-    this.djRoles = new Map(); // Map<guildId, roleId>
-    this.maxQueueSize = 50; // Limite massimo coda
+    this.queues = new Map(); // Map<guildId, queue> - ephemeral
   }
 
   /**
-   * Imposta il canale musica per un server
-   * @param {string} guildId - ID del server
-   * @param {string} channelId - ID del canale vocale
+   * Setup music channel for a server (persists to DB)
    */
-  setupMusicChannel(guildId, channelId) {
-    this.musicChannels.set(guildId, channelId);
+  async setupMusicChannel(guildId, channelId) {
+    await db.updateGuildConfig(guildId, { musicChannelId: channelId });
     return true;
   }
 
   /**
-   * Ottiene il canale musica configurato
-   * @param {string} guildId - ID del server
+   * Get configured music channel
    */
-  getMusicChannel(guildId) {
-    return this.musicChannels.get(guildId);
+  async getMusicChannel(guildId) {
+    const config = await db.getGuildConfig(guildId);
+    return config?.musicChannelId || null;
   }
 
   /**
-   * Imposta il ruolo DJ per un server
-   * @param {string} guildId - ID del server
-   * @param {string} roleId - ID del ruolo DJ
+   * Set DJ role for a server (persists to DB)
    */
-  setDJRole(guildId, roleId) {
-    this.djRoles.set(guildId, roleId);
+  async setDJRole(guildId, roleId) {
+    await db.updateGuildConfig(guildId, { djRoleId: roleId });
     return true;
   }
 
   /**
-   * Verifica se un utente ha i permessi DJ
-   * @param {GuildMember} member - Membro del server
-   * @param {string} guildId - ID del server
+   * Check if user has DJ permission
    */
-  hasDJPermission(member, guildId) {
-    const djRole = this.djRoles.get(guildId);
-    if (!djRole) return true; // Se non c'è ruolo DJ, tutti possono usare i comandi
+  async hasDJPermission(member, guildId) {
+    const config = await db.getGuildConfig(guildId);
+    const djRole = config?.djRoleId;
+    if (!djRole) return true; // No DJ role = everyone can use commands
     return member.roles.cache.has(djRole) || member.permissions.has(PermissionFlagsBits.Administrator);
   }
 
   /**
-   * Inizializza la coda musicale per un server
-   * @param {string} guildId - ID del server
+   * Set max queue size (persists to DB)
+   */
+  async setMaxQueueSize(guildId, size) {
+    await db.updateGuildConfig(guildId, { maxQueueSize: size });
+    return true;
+  }
+
+  /**
+   * Get max queue size
+   */
+  async getMaxQueueSize(guildId) {
+    const config = await db.getGuildConfig(guildId);
+    return config?.maxQueueSize || 100;
+  }
+
+  /**
+   * Set default volume (persists to DB)
+   */
+  async setDefaultVolume(guildId, volume) {
+    await db.updateGuildConfig(guildId, { defaultVolume: volume });
+    return true;
+  }
+
+  /**
+   * Get default volume
+   */
+  async getDefaultVolume(guildId) {
+    const config = await db.getGuildConfig(guildId);
+    return config?.defaultVolume || 50;
+  }
+
+  /**
+   * Initialize queue for a server (ephemeral)
    */
   initQueue(guildId) {
     if (!this.queues.has(guildId)) {
       this.queues.set(guildId, {
         songs: [],
-        volume: 50,
         playing: false,
-        loop: false,
-        connection: null,
-        player: null
+        volume: 50,
+        loop: false
       });
     }
     return this.queues.get(guildId);
   }
 
   /**
-   * Ottiene la coda per un server
-   * @param {string} guildId - ID del server
+   * Get queue for a server
    */
   getQueue(guildId) {
-    return this.queues.get(guildId);
+    return this.queues.get(guildId) || null;
   }
 
   /**
-   * Aggiunge una canzone alla coda con controllo limiti
-   * @param {string} guildId - ID del server
-   * @param {Object} song - Dati della canzone
+   * Add song to queue
    */
-  addToQueue(guildId, song) {
+  async addToQueue(guildId, song) {
     const queue = this.initQueue(guildId);
+    const maxSize = await this.getMaxQueueSize(guildId);
     
-    // Controllo limite coda
-    if (queue.songs.length >= this.maxQueueSize) {
-      throw new Error(`La coda ha raggiunto il limite massimo di ${this.maxQueueSize} canzoni`);
+    if (queue.songs.length >= maxSize) {
+      throw new Error(`Queue is full (max ${maxSize} songs)`);
     }
     
     queue.songs.push(song);
@@ -95,94 +114,37 @@ class MusicHandler {
   }
 
   /**
-   * Rimuove una canzone dalla coda
-   * @param {string} guildId - ID del server
-   * @param {number} index - Indice della canzone
+   * Handle /play command
    */
-  removeFromQueue(guildId, index) {
-    const queue = this.getQueue(guildId);
-    if (!queue || index < 0 || index >= queue.songs.length) {
-      return null;
-    }
-    return queue.songs.splice(index, 1)[0];
-  }
-
-  /**
-   * Imposta il volume per un server
-   * @param {string} guildId - ID del server
-   * @param {number} volume - Volume (0-100)
-   */
-  setVolume(guildId, volume) {
-    const queue = this.getQueue(guildId);
-    if (!queue) return false;
-    
-    // Limita il volume tra 0 e 100
-    volume = Math.max(0, Math.min(100, volume));
-    queue.volume = volume;
-    
-    // Aggiorna il volume del player se sta riproducendo
-    if (queue.player && queue.playing) {
-      queue.player.volume = volume / 100;
-    }
-    
-    return true;
-  }
-
-  /**
-   * Ottiene il volume corrente
-   * @param {string} guildId - ID del server
-   */
-  getVolume(guildId) {
-    const queue = this.getQueue(guildId);
-    return queue ? queue.volume : 50;
-  }
-
-  /**
-   * Comando /play - Riproduce una canzone
-   * @param {Interaction} interaction - Interazione Discord
-   * @param {string} query - Query di ricerca o URL
-   */
-  async handlePlayCommand(interaction, query) {
-    const member = interaction.member;
-    const guildId = interaction.guildId;
-    
-    // Verifica permessi DJ
-    if (!this.hasDJPermission(member, guildId)) {
-      return interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor('#FF0000')
-          .setDescription('❌ Non hai i permessi DJ per usare questo comando!')],
-        ephemeral: true
-      });
-    }
-    
-    // Verifica che l'utente sia in un canale vocale
-    const voiceChannel = member.voice.channel;
-    if (!voiceChannel) {
-      return interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor('#FF0000')
-          .setDescription('❌ Devi essere in un canale vocale per riprodurre musica!')],
-        ephemeral: true
-      });
-    }
-    
-    // Verifica il canale musica configurato (se presente)
-    const musicChannelId = this.getMusicChannel(guildId);
-    if (musicChannelId && voiceChannel.id !== musicChannelId) {
-      return interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor('#FF0000')
-          .setDescription(`❌ Puoi riprodurre musica solo nel canale <#${musicChannelId}>!`)],
-        ephemeral: true
-      });
-    }
-    
+  async handlePlayCommand(interaction) {
     try {
-      // Inizializza la coda
+      const guildId = interaction.guild.id;
+      const member = interaction.member;
+      const query = interaction.options.getString('song');
+
+      // Check DJ permission
+      if (!(await this.hasDJPermission(member, guildId))) {
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor('#FF0000')
+            .setDescription('❌ You need the DJ role to use music commands')],
+          ephemeral: true
+        });
+      }
+
+      // Check if user is in voice channel
+      if (!member.voice.channel) {
+        return interaction.reply({
+          embeds: [new EmbedBuilder()
+            .setColor('#FF0000')
+            .setDescription('❌ You must be in a voice channel')],
+          ephemeral: true
+        });
+      }
+
       const queue = this.initQueue(guildId);
       
-      // Crea oggetto canzone (placeholder - richiederebbe integrazione con API musica)
+      // Create song object (placeholder - would require music API integration)
       const song = {
         title: query,
         url: query,
@@ -190,39 +152,37 @@ class MusicHandler {
         requester: member.user.tag
       };
       
-      // Aggiungi alla coda
-      const position = this.addToQueue(guildId, song);
+      // Add to queue
+      const position = await this.addToQueue(guildId, song);
       
       const embed = new EmbedBuilder()
         .setColor('#00FF00')
-        .setTitle('🎵 Canzone aggiunta alla coda')
+        .setTitle('🎵 Song added to queue')
         .setDescription(`**${song.title}**`)
         .addFields(
-          { name: 'Richiesta da', value: song.requester, inline: true },
-          { name: 'Posizione', value: position.toString(), inline: true }
+          { name: 'Requested by', value: song.requester, inline: true },
+          { name: 'Position', value: position.toString(), inline: true }
         );
       
       await interaction.reply({ embeds: [embed] });
       
-      // Se non sta già riproducendo, inizia la riproduzione
+      // If not playing, start playback (placeholder)
       if (!queue.playing) {
-        // Placeholder per avviare la riproduzione
-        // Richiederebbe integrazione con discord-player o simili
+        // Would require discord-player or similar integration
       }
       
     } catch (error) {
       return interaction.reply({
         embeds: [new EmbedBuilder()
           .setColor('#FF0000')
-          .setDescription(`❌ Errore: ${error.message}`)],
+          .setDescription(`❌ Error: ${error.message}`)],
         ephemeral: true
       });
     }
   }
 
   /**
-   * Pulisce la coda di un server
-   * @param {string} guildId - ID del server
+   * Clear queue for a server
    */
   clearQueue(guildId) {
     const queue = this.getQueue(guildId);
@@ -233,8 +193,7 @@ class MusicHandler {
   }
 
   /**
-   * Rimuove completamente la coda di un server
-   * @param {string} guildId - ID del server
+   * Delete queue for a server
    */
   deleteQueue(guildId) {
     this.queues.delete(guildId);
