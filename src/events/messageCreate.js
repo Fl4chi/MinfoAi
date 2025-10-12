@@ -1,5 +1,4 @@
 const { Events } = require('discord.js');
-const { logActivity } = require('../logs/activityLog');
 const User = require('../database/models/User');
 const Message = require('../database/models/Message');
 
@@ -8,7 +7,7 @@ module.exports = {
   async execute(message) {
     // Ignora i bot
     if (message.author.bot) return;
-    
+
     try {
       // Trova o crea l'utente
       let user = await User.findOne({ userId: message.author.id });
@@ -20,52 +19,32 @@ module.exports = {
           level: 1,
           messageCount: 0
         });
-        
-        // Log nuovo utente
-        logActivity('event', 'new_user_registered', {
-          userId: message.author.id,
-          username: message.author.tag,
-          guildId: message.guild?.id,
-          guildName: message.guild?.name
-        });
       }
-      
+
       // Incrementa il conteggio messaggi
       user.messageCount += 1;
-      
+
       // Aggiungi XP (es. 10-25 XP per messaggio)
       const xpGain = Math.floor(Math.random() * 16) + 10;
       user.xp += xpGain;
-      
+
       // Calcola XP necessario per il prossimo livello
       const xpRequired = user.level * 100;
-      
+
       // Auto level-up
       if (user.xp >= xpRequired) {
-        const oldLevel = user.level;
         user.level += 1;
         user.xp = user.xp - xpRequired;
-        
-        // Log level-up
-        logActivity('event', 'user_levelup', {
-          userId: message.author.id,
-          username: message.author.tag,
-          guildId: message.guild?.id,
-          guildName: message.guild?.name,
-          oldLevel,
-          newLevel: user.level,
-          totalMessages: user.messageCount
-        });
-        
+
         // Messaggio di congratulazioni per il livello
         await message.channel.send(
           `🎉 Congratulazioni ${message.author}! Hai raggiunto il livello **${user.level}**!`
         );
       }
-      
+
       // Salva l'utente nel database
       await user.save();
-      
+
       // Log del messaggio nel database
       const messageLog = new Message({
         messageId: message.id,
@@ -76,19 +55,9 @@ module.exports = {
         timestamp: message.createdAt
       });
       await messageLog.save();
-      
+
     } catch (error) {
       console.error('Errore nel tracking del messaggio:', error);
-      
-      // Log errore
-      logActivity('error', 'message_tracking_error', {
-        userId: message.author.id,
-        username: message.author.tag,
-        guildId: message.guild?.id,
-        guildName: message.guild?.name,
-        errorMessage: error.message,
-        errorStack: error.stack
-      });
     }
   }
 };
