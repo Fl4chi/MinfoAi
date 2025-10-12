@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ComponentType } = require('discord.js');
 const db = require('../database/db');
-
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setbot')
@@ -13,7 +12,6 @@ module.exports = {
       pages: [],
       config: await db.getGuildConfig(interaction.guild.id) || {}
     };
-
     const renderCategory = ({ category, config }) => {
       const embed = new EmbedBuilder().setColor(0x00AE86).setTitle(`⚙️ Configurazione: ${category}`);
       switch (category) {
@@ -66,7 +64,6 @@ module.exports = {
       }
       return embed;
     };
-
     const buildCategoryMenu = (current) => {
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
@@ -84,14 +81,12 @@ module.exports = {
           ])
       );
     };
-
     const buildNavButtons = () => {
       return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('prev').setLabel('◀').setStyle(ButtonStyle.Primary).setDisabled(state.pageIndex === 0),
         new ButtonBuilder().setCustomId('next').setLabel('▶').setStyle(ButtonStyle.Primary).setDisabled(state.pageIndex === state.pages.length - 1)
       );
     };
-
     const buildConfigRows = () => {
       const rows = [];
       switch (state.category) {
@@ -163,52 +158,44 @@ module.exports = {
       }
       return rows;
     };
-
     const buildPages = () => {
       const catOrder = ['overview', 'welcome', 'goodbye', 'music', 'moderation', 'gamification', 'giveaway', 'verify'];
       state.pageIndex = Math.max(0, Math.min(state.pageIndex, catOrder.length - 1));
       state.pages = catOrder.map(cat => renderCategory({ ...state, category: cat }));
     };
-
     buildPages();
-
     await interaction.reply({
       embeds: [state.pages[state.pageIndex]],
-      components: [buildCategoryMenu(state.category), buildNavButtons()],
+      components: [buildCategoryMenu(state.category), ...buildConfigRows(), buildNavButtons()],
       ephemeral: true,
     });
-
     const msg = await interaction.fetchReply();
     const buttonCollector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 5 * 60_000 });
     const selectCollector = msg.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 5 * 60_000 });
-
     const ensureAuthor = (i) => i.user.id === interaction.user.id;
-
     buttonCollector.on('collect', async (i) => {
       if (!ensureAuthor(i)) return i.reply({ content: 'Non puoi usare questi pulsanti!', ephemeral: true });
       if (i.customId === 'prev') state.pageIndex--;
       if (i.customId === 'next') state.pageIndex++;
       buildPages();
-      await i.update({ embeds: [state.pages[state.pageIndex]], components: [buildCategoryMenu(state.category), buildNavButtons()] });
+      await i.update({ embeds: [state.pages[state.pageIndex]], components: [buildCategoryMenu(state.category), ...buildConfigRows(), buildNavButtons()] });
     });
-
     selectCollector.on('collect', async (i) => {
       if (!ensureAuthor(i)) return i.reply({ content: 'Non puoi usare questi menu!', ephemeral: true });
       if (i.customId === 'category') {
         state.category = i.values[0];
         state.pageIndex = ['overview', 'welcome', 'goodbye', 'music', 'moderation', 'gamification', 'giveaway', 'verify'].indexOf(state.category);
         buildPages();
-        await i.update({ embeds: [state.pages[state.pageIndex]], components: [buildCategoryMenu(state.category), buildNavButtons()] });
+        await i.update({ embeds: [state.pages[state.pageIndex]], components: [buildCategoryMenu(state.category), ...buildConfigRows(), buildNavButtons()] });
       } else {
         const key = i.customId;
         const val = i.values[0];
         state.config[key] = val;
         await db.updateGuildConfig(interaction.guild.id, { [key]: val });
         buildPages();
-        await i.update({ embeds: [state.pages[state.pageIndex]], components: [buildCategoryMenu(state.category), buildNavButtons()] });
+        await i.update({ embeds: [state.pages[state.pageIndex]], components: [buildCategoryMenu(state.category), ...buildConfigRows(), buildNavButtons()] });
       }
     });
-
     buttonCollector.on('end', async () => {
       await interaction.editReply({ components: [] }).catch(() => {});
     });
