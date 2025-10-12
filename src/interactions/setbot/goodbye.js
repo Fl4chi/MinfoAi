@@ -1,236 +1,148 @@
-const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
-const GuildConfig = require('../../database/models/GuildConfig');
+// Refactored: 2025-10-12 - Dashboard goodbye con aggiornamento live immediato
+// Pattern: onComponent, onModal, buildDashboard (ref: verification.js)
 
-// UX Helper: Crea embed con guida rapida
-function createHelpEmbed(title, description, fields, color = '#FF4444', activeCategory = null) {
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle(`${activeCategory ? '🔹 ' : ''}${title}`)
-        .setDescription(description)
-        .setFooter({ text: '💡 Usa i menu e pulsanti per navigare • Mobile-friendly' })
-        .setTimestamp();
-    
-    if (fields && fields.length > 0) {
-        embed.addFields(fields);
-    }
-    
-    return embed;
+const db = require('../../database/db');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+
+// Helper: get channels
+function getTextChannels(interaction) {
+  return interaction.guild.channels.cache
+    .filter(c => c.type === ChannelType.GuildText)
+    .map(c => ({ label: `#${c.name}`, value: c.id }))
+    .slice(0, 24);
 }
 
-// UX Helper: Feedback success/error visibili
-function createFeedbackEmbed(type, message, details = null) {
-    const colors = {
-        success: '#2ECC71',
-        error: '#E74C3C',
-        warning: '#F39C12',
-        info: '#3498DB'
+// Helper: ensure config
+function ensureConfig(interaction) {
+  let cfg = interaction.client.guildConfigs.get(interaction.guildId);
+  if (!cfg) {
+    cfg = {
+      guildId: interaction.guildId,
+      goodbyeEnabled: false,
+      goodbyeChannelId: null,
+      goodbyeMessage: 'Addio {user}!'
     };
-    
-    const emojis = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
-    };
-    
-    const embed = new EmbedBuilder()
-        .setColor(colors[type] || colors.info)
-        .setDescription(`${emojis[type]} **${message}**${details ? `\n\n${details}` : ''}`)
-        .setTimestamp();
-    
-    return embed;
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+  }
+  if (cfg.goodbyeMessage === undefined) cfg.goodbyeMessage = 'Addio {user}!';
+  return cfg;
+}
+
+// Build dashboard embed + components
+function buildDashboard(interaction) {
+  const cfg = ensureConfig(interaction);
+  const channels = getTextChannels(interaction);
+  
+  const embed = new EmbedBuilder()
+    .setTitle('⚙️ Configurazione: Goodbye')
+    .setColor(cfg.goodbyeEnabled ? '#43B581' : '#ED4245')
+    .addFields(
+      { name: 'Canale Addio', value: cfg.goodbyeChannelId ? `<#${cfg.goodbyeChannelId}>` : 'Non impostato', inline: false },
+      { name: 'Messaggio', value: cfg.goodbyeMessage || 'Addio {user}!', inline: false },
+      { name: 'Sistema', value: cfg.goodbyeEnabled ? '🟢 ON' : '🔴 OFF', inline: false }
+    );
+
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('goodbye_channel_select')
+        .setPlaceholder(cfg.goodbyeChannelId ? 'Canale impostato' : 'Seleziona canale addio')
+        .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels])
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('goodbye_set_message')
+        .setLabel('Imposta Messaggio')
+        .setStyle(1)
+        .setEmoji('✏️'),
+      new ButtonBuilder()
+        .setCustomId('goodbye_toggle')
+        .setLabel(cfg.goodbyeEnabled ? 'Disattiva' : 'Attiva')
+        .setStyle(cfg.goodbyeEnabled ? 4 : 3)
+    )
+  ];
+
+  return { embed, rows };
+}
+
+// Handle select menu changes
+async function handleSelect(interaction, value) {
+  await interaction.deferUpdate();
+  const cfg = ensureConfig(interaction);
+  const newVal = value === 'none' ? null : value;
+  cfg.goodbyeChannelId = newVal;
+  await db.updateGuildConfig(interaction.guildId, { goodbyeChannelId: newVal });
+  interaction.client.guildConfigs.set(interaction.guildId, cfg);
+  const { embed, rows } = buildDashboard(interaction);
+  return interaction.editReply({ embeds: [embed], components: rows });
+}
+
+// Handle button clicks
+async function handleComponent(interaction) {
+  const id = interaction.customId;
+  
+  if (id === 'goodbye_toggle') {
+    await interaction.deferUpdate();
+    const cfg = ensureConfig(interaction);
+    cfg.goodbyeEnabled = !cfg.goodbyeEnabled;
+    await db.updateGuildConfig(interaction.guildId, { goodbyeEnabled: cfg.goodbyeEnabled });
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  }
+
+  if (id === 'goodbye_set_message') {
+    const modal = new ModalBuilder()
+      .setCustomId('goodbye_message_modal')
+      .setTitle('Imposta Messaggio Goodbye');
+    const input = new TextInputBuilder()
+      .setCustomId('goodbye_message_input')
+      .setLabel('Messaggio (usa {user} per menzionare)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Addio {user}!')
+      .setRequired(true)
+      .setValue(ensureConfig(interaction).goodbyeMessage || 'Addio {user}!');
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+}
+
+// Handle modal submits
+async function handleModals(interaction) {
+  if (interaction.customId === 'goodbye_message_modal') {
+    await interaction.deferUpdate();
+    const msg = interaction.fields.getTextInputValue('goodbye_message_input');
+    const cfg = ensureConfig(interaction);
+    cfg.goodbyeMessage = msg;
+    await db.updateGuildConfig(interaction.guildId, { goodbyeMessage: msg });
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  }
 }
 
 module.exports = {
-    customId: 'goodbye',
-    
-    async execute(interaction) {
-        // Verifica permessi
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-            return interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Permessi Insufficienti', 
-                    'Ti serve il permesso **Gestisci Server** per configurare i messaggi di addio.')],
-                ephemeral: true
-            });
-        }
-        
-        try {
-            // Carica config attuale usando il nuovo modello GuildConfig
-            const config = await GuildConfig.get(interaction.guild.id);
-            const goodbyeChannelId = config.goodbyeChannelId || null;
-            const goodbyeMessage = config.goodbyeMessage || null;
-            const goodbyeEnabled = config.goodbyeEnabled || false;
-            const embedColor = config.goodbyeEmbedColor || '#FF4444';
-            const showStats = config.goodbyeShowStats || false;
-            
-            // Check permessi bot
-            const botMember = interaction.guild.members.me;
-            const canSendMessages = botMember.permissions.has(PermissionFlagsBits.SendMessages);
-            const canEmbedLinks = botMember.permissions.has(PermissionFlagsBits.EmbedLinks);
-            
-            // Embed principale con highlight categoria attiva
-            const embed = createHelpEmbed(
-                '👋 Configurazione Addio',
-                '**Sistema di Messaggi Addio Personalizzati**\n\n' +
-                'Saluta i membri che lasciano il server con messaggi personalizzati, ' +
-                'embed eleganti e statistiche in tempo reale.\n\n' +
-                '**📋 Funzionalità Disponibili:**\n' +
-                (canSendMessages ? '✅' : '⚠️') + ' Messaggi di addio personalizzati\n' +
-                (canEmbedLinks ? '✅' : '⚠️') + ' Embed premium con colori custom\n' +
-                '✅ Statistiche membri aggiornate\n' +
-                '✅ Variabili dinamiche {user}, {server}, {count}\n' +
-                '✅ Anteprima live del messaggio\n' +
-                '✅ Canale dedicato per gli addii\n\n' +
-                ((!canSendMessages || !canEmbedLinks) ? 
-                    '⚠️ **Attenzione**: Il bot necessita permessi aggiuntivi\n\n' : '') +
-                '👇 **Seleziona cosa configurare dal menu:**',
-                [
-                    {
-                        name: '📊 Stato Corrente',
-                        value: `\`\`\`\n` +
-                            `Sistema: ${goodbyeEnabled ? '🟢 ATTIVO' : '🔴 DISATTIVATO'}\n` +
-                            `Canale: ${goodbyeChannelId ? '<#' + goodbyeChannelId + '>' : '❌ Non impostato'}\n` +
-                            `Messaggio: ${goodbyeMessage ? 'Personalizzato' : 'Default'}\n` +
-                            `Colore Embed: ${embedColor || '#FF4444 (default)'}\n` +
-                            `Statistiche: ${showStats ? '✅ Visibili' : '❌ Nascoste'}\n` +
-                            `\`\`\``,
-                        inline: false
-                    },
-                    {
-                        name: '📌 Variabili Disponibili',
-                        value: '`{user}` - Nome utente | `{mention}` - Menzione utente\n' +
-                               '`{server}` - Nome server | `{count}` - Conteggio membri\n' +
-                               '`{tag}` - Username#1234 | `{id}` - ID utente',
-                        inline: false
-                    }
-                ],
-                embedColor,
-                'goodbye'
-            );
-            
-            // Menu opzioni
-            const baseOptions = [
-                {
-                    label: '📢 Canale Addii',
-                    description: 'Imposta dove inviare i messaggi di addio',
-                    value: 'goodbye_set_channel',
-                    emoji: '📢',
-                    requiredBotPermission: canSendMessages
-                },
-                {
-                    label: '✏️ Messaggio Custom',
-                    description: 'Personalizza testo e contenuto del messaggio',
-                    value: 'goodbye_set_message',
-                    emoji: '✏️'
-                },
-                {
-                    label: '🎨 Colore Embed',
-                    description: 'Scegli il colore dell\'embed (es. #FF4444)',
-                    value: 'goodbye_set_color',
-                    emoji: '🎨',
-                    requiredBotPermission: canEmbedLinks
-                },
-                {
-                    label: '📊 Statistiche Membri',
-                    description: 'Mostra/nascondi conteggio membri nel messaggio',
-                    value: 'goodbye_stats',
-                    emoji: '📊'
-                },
-                {
-                    label: '👁️ Anteprima Live',
-                    description: 'Visualizza come apparirà il messaggio di addio',
-                    value: 'goodbye_preview',
-                    emoji: '👁️'
-                },
-                {
-                    label: '📌 Guida Variabili',
-                    description: 'Lista completa variabili per messaggi dinamici',
-                    value: 'goodbye_variables',
-                    emoji: '📌'
-                }
-            ];
-            
-            // Filtra opzioni per permessi bot
-            const availableOptions = baseOptions.filter(opt => {
-                if (opt.requiredBotPermission !== undefined && !opt.requiredBotPermission) {
-                    return false;
-                }
-                return true;
-            });
-            
-            // Aggiungi info permessi mancanti
-            if (availableOptions.length < baseOptions.length) {
-                availableOptions.push({
-                    label: '⚠️ Opzioni Nascoste',
-                    description: 'Bot necessita permessi: Invia Messaggi, Embed',
-                    value: 'goodbye_permissions_info',
-                    emoji: 'ℹ️'
-                });
-            }
-            
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId('goodbye_config_option')
-                .setPlaceholder('🔧 Scegli cosa configurare...')
-                .addOptions(availableOptions.map(opt => ({
-                    label: opt.label,
-                    description: opt.description,
-                    value: opt.value,
-                    emoji: opt.emoji
-                })));
-            
-            // Pulsanti azione principali
-            const toggleButton = new ButtonBuilder()
-                .setCustomId('goodbye_toggle')
-                .setLabel(goodbyeEnabled ? 'Disabilita Sistema' : 'Abilita Sistema')
-                .setStyle(goodbyeEnabled ? ButtonStyle.Danger : ButtonStyle.Success)
-                .setEmoji(goodbyeEnabled ? '🔴' : '🟢');
-            
-            const previewButton = new ButtonBuilder()
-                .setCustomId('goodbye_preview')
-                .setLabel('Anteprima')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('👁️')
-                .setDisabled(!goodbyeChannelId || !canSendMessages);
-            
-            const saveButton = new ButtonBuilder()
-                .setCustomId('goodbye_save')
-                .setLabel('Salva')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('💾')
-                .setDisabled(true); // Abilitato dopo modifiche
-            
-            const cancelButton = new ButtonBuilder()
-                .setCustomId('goodbye_cancel')
-                .setLabel('Annulla')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('❌');
-            
-            const backButton = new ButtonBuilder()
-                .setCustomId('setbot_back')
-                .setLabel('Menu Principale')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬅️');
-            
-            // Layout componenti mobile-friendly
-            const row1 = new ActionRowBuilder().addComponents(selectMenu);
-            const row2 = new ActionRowBuilder().addComponents(toggleButton, previewButton, backButton);
-            const row3 = new ActionRowBuilder().addComponents(saveButton, cancelButton);
-            
-            await interaction.update({
-                embeds: [embed],
-                components: [row1, row2, row3],
-                ephemeral: true
-            });
-            
-        } catch (error) {
-            console.error('Errore goodbye config:', error);
-            await interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Errore di Sistema', 
-                    'Impossibile caricare la configurazione. Riprova tra poco o contatta il supporto.')],
-                ephemeral: true
-            });
-        }
+  // Entrypoint to render dashboard
+  async handleGoodbye(interaction) {
+    const { embed, rows } = buildDashboard(interaction);
+    if (interaction.replied || interaction.deferred) {
+      return interaction.editReply({ embeds: [embed], components: rows });
     }
+    return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+  },
+
+  // Router for selects/buttons
+  async onComponent(interaction) {
+    const id = interaction.customId;
+    if (id === 'goodbye_channel_select') {
+      const v = interaction.values?.[0];
+      return handleSelect(interaction, v);
+    }
+    return handleComponent(interaction);
+  },
+
+  // Router for modals
+  async onModal(interaction) {
+    return handleModals(interaction);
+  }
 };
