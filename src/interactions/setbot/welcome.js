@@ -1,248 +1,59 @@
-const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, ChannelType, RoleSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
-const GuildConfig = require('../../database/models/GuildConfig');
+const db = require('../../database/db');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder } = require('discord.js');
 
-// UX Helper: Crea embed con guida rapida
-function createHelpEmbed(title, description, fields, color = '#00FF7F', activeCategory = null) {
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle(`${activeCategory ? '🔹 ' : ''}${title}`)
-        .setDescription(description)
-        .setFooter({ text: '💡 Usa i menu e pulsanti per navigare • Mobile-friendly' })
-        .setTimestamp();
-    
-    if (fields && fields.length > 0) {
-        embed.addFields(fields);
-    }
-    
-    return embed;
+// Funzione per generare l'embed welcome nei dati aggiornati
+function buildWelcomeEmbed(config) {
+  return new EmbedBuilder()
+    .setTitle('⚙️ Configurazione: welcome')
+    .setColor(config.welcomeEnabled ? '#43B581' : '#ED4245')
+    .addFields(
+      { name: 'Canale Benvenuto', value: config.welcomeChannelId ? `<#${config.welcomeChannelId}>` : 'Non impostato', inline: false },
+      { name: 'Messaggio', value: config.welcomeMessage || '{user}', inline: false },
+      { name: 'Sistema', value: config.welcomeEnabled ? '🟢 ON' : '🔴 OFF', inline: false }
+    );
 }
 
-// UX Helper: Feedback success/error visibili
-function createFeedbackEmbed(type, message, details = null) {
-    const colors = {
-        success: '#2ECC71',
-        error: '#E74C3C',
-        warning: '#F39C12',
-        info: '#3498DB'
-    };
-    
-    const emojis = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
-    };
-    
-    const embed = new EmbedBuilder()
-        .setColor(colors[type] || colors.info)
-        .setDescription(`${emojis[type]} **${message}**${details ? `\n\n${details}` : ''}`)
-        .setTimestamp();
-    
-    return embed;
+// Genera i select e bottoni della dashboard welcome (aggiungi canali discord dinamicamente)
+function buildWelcomeComponents(config, allChannels) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('welcome_channel_select')
+        .setPlaceholder('Seleziona canale benvenuto')
+        .addOptions([{ label: 'Nessuno', value: 'none' }, ...(allChannels || [])])
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('welcome_toggle')
+        .setLabel(config.welcomeEnabled ? 'Disattiva' : 'Attiva')
+        .setStyle(config.welcomeEnabled ? 4 : 3)
+    )
+    // espandi ulteriori funzionalità qui
+  ];
 }
 
-module.exports = {
-    customId: 'welcome',
-    
-    async execute(interaction) {
-        // Verifica permessi
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-            return interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Permessi Insufficienti', 
-                    'Ti serve il permesso **Gestisci Server** per configurare i messaggi di benvenuto.')],
-                ephemeral: true
-            });
-        }
-        
-        try {
-            // Carica config attuale usando il nuovo modello GuildConfig
-            const config = await GuildConfig.get(interaction.guild.id);
-            const welcomeChannelId = config.welcomeChannelId || null;
-            const welcomeMessage = config.welcomeMessage || null;
-            const welcomeEnabled = config.welcomeEnabled || false;
-            const autoRoleId = config.autoroles?.[0] || null;
-            const imageEnabled = config.welcomeImageEnabled || false;
-            const embedColor = config.welcomeEmbedColor || '#00FF7F';
-            
-            // Check permessi bot
-            const botMember = interaction.guild.members.me;
-            const canSendMessages = botMember.permissions.has(PermissionFlagsBits.SendMessages);
-            const canEmbedLinks = botMember.permissions.has(PermissionFlagsBits.EmbedLinks);
-            const canManageRoles = botMember.permissions.has(PermissionFlagsBits.ManageRoles);
-            const canAttachFiles = botMember.permissions.has(PermissionFlagsBits.AttachFiles);
-            
-            // Embed principale con highlight categoria attiva
-            const embed = createHelpEmbed(
-                '👋 Configurazione Benvenuto',
-                '**Sistema di Benvenuto Automatico e Personalizzato**\n\n' +
-                'Accogli i nuovi membri con messaggi personalizzati, embed eleganti, ' +
-                'immagini automatiche e ruoli di benvenuto.\n\n' +
-                '**📋 Funzionalità Disponibili:**\n' +
-                (canSendMessages ? '✅' : '⚠️') + ' Messaggi personalizzati con variabili dinamiche\n' +
-                (canEmbedLinks ? '✅' : '⚠️') + ' Embed premium con colori personalizzabili\n' +
-                (canAttachFiles ? '✅' : '⚠️') + ' Immagini di benvenuto automatiche\n' +
-                (canManageRoles ? '✅' : '⚠️') + ' Assegnazione ruolo automatica al join\n' +
-                '✅ Canale benvenuto dedicato\n' +
-                '✅ Anteprima live del messaggio\n\n' +
-                ((!canSendMessages || !canEmbedLinks || !canManageRoles) ? 
-                    '⚠️ **Attenzione**: Il bot necessita permessi aggiuntivi\n\n' : '') +
-                '👇 **Seleziona cosa configurare dal menu:**',
-                [
-                    {
-                        name: '📊 Stato Corrente',
-                        value: `\`\`\`\n` +
-                            `Sistema: ${welcomeEnabled ? '🟢 ATTIVO' : '🔴 DISATTIVATO'}\n` +
-                            `Canale: ${welcomeChannelId ? '<#' + welcomeChannelId + '>' : '❌ Non impostato'}\n` +
-                            `Messaggio: ${welcomeMessage ? 'Personalizzato' : 'Default'}\n` +
-                            `Ruolo Auto: ${autoRoleId ? '<@&' + autoRoleId + '>' : '❌ Disabilitato'}\n` +
-                            `Immagine: ${imageEnabled ? '✅ Abilitata' : '❌ Disabilitata'}\n` +
-                            `Colore Embed: ${embedColor || '#00FF7F (default)'}\n` +
-                            `\`\`\``,
-                        inline: false
-                    },
-                    {
-                        name: '📌 Variabili Disponibili',
-                        value: '`{user}` - Nome utente | `{mention}` - Menzione utente\n' +
-                               '`{server}` - Nome server | `{count}` - Conteggio membri\n' +
-                               '`{tag}` - Username#1234 | `{id}` - ID utente',
-                        inline: false
-                    }
-                ],
-                embedColor,
-                'welcome'
-            );
-            
-            // Menu opzioni
-            const baseOptions = [
-                {
-                    label: '📢 Canale Benvenuto',
-                    description: 'Imposta dove inviare i messaggi di benvenuto',
-                    value: 'welcome_set_channel',
-                    emoji: '📢',
-                    requiredBotPermission: canSendMessages
-                },
-                {
-                    label: '✏️ Messaggio Custom',
-                    description: 'Personalizza testo e contenuto del messaggio',
-                    value: 'welcome_set_message',
-                    emoji: '✏️'
-                },
-                {
-                    label: '🎨 Colore Embed',
-                    description: 'Scegli il colore dell\'embed (es. #00FF7F)',
-                    value: 'welcome_set_color',
-                    emoji: '🎨',
-                    requiredBotPermission: canEmbedLinks
-                },
-                {
-                    label: '🎭 Ruolo Automatico',
-                    description: 'Assegna automaticamente un ruolo ai nuovi membri',
-                    value: 'welcome_auto_role',
-                    emoji: '🎭',
-                    requiredBotPermission: canManageRoles
-                },
-                {
-                    label: '🖼️ Immagine Benvenuto',
-                    description: 'Genera immagini personalizzate per i nuovi membri',
-                    value: 'welcome_image',
-                    emoji: '🖼️',
-                    requiredBotPermission: canAttachFiles
-                },
-                {
-                    label: '👁️ Anteprima Live',
-                    description: 'Visualizza come apparirà il messaggio di benvenuto',
-                    value: 'welcome_preview',
-                    emoji: '👁️'
-                },
-                {
-                    label: '📌 Guida Variabili',
-                    description: 'Lista completa variabili per messaggi dinamici',
-                    value: 'welcome_variables',
-                    emoji: '📌'
-                }
-            ];
-            
-            // Filtra opzioni per permessi bot
-            const availableOptions = baseOptions.filter(opt => {
-                if (opt.requiredBotPermission !== undefined && !opt.requiredBotPermission) {
-                    return false;
-                }
-                return true;
-            });
-            
-            // Aggiungi info permessi mancanti
-            if (availableOptions.length < baseOptions.length) {
-                availableOptions.push({
-                    label: '⚠️ Opzioni Nascoste',
-                    description: 'Bot necessita: Invia Messaggi, Embed, Gestisci Ruoli',
-                    value: 'welcome_permissions_info',
-                    emoji: 'ℹ️'
-                });
-            }
-            
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId('welcome_config_option')
-                .setPlaceholder('🔧 Scegli cosa configurare...')
-                .addOptions(availableOptions.map(opt => ({
-                    label: opt.label,
-                    description: opt.description,
-                    value: opt.value,
-                    emoji: opt.emoji
-                })));
-            
-            // Pulsanti azione principali
-            const toggleButton = new ButtonBuilder()
-                .setCustomId('welcome_toggle')
-                .setLabel(welcomeEnabled ? 'Disabilita Sistema' : 'Abilita Sistema')
-                .setStyle(welcomeEnabled ? ButtonStyle.Danger : ButtonStyle.Success)
-                .setEmoji(welcomeEnabled ? '🔴' : '🟢');
-            
-            const previewButton = new ButtonBuilder()
-                .setCustomId('welcome_preview')
-                .setLabel('Anteprima')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('👁️')
-                .setDisabled(!welcomeChannelId || !canSendMessages);
-            
-            const saveButton = new ButtonBuilder()
-                .setCustomId('welcome_save')
-                .setLabel('Salva')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('💾')
-                .setDisabled(true); // Abilitato dopo modifiche
-            
-            const cancelButton = new ButtonBuilder()
-                .setCustomId('welcome_cancel')
-                .setLabel('Annulla')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('❌');
-            
-            const backButton = new ButtonBuilder()
-                .setCustomId('setbot_back')
-                .setLabel('Menu Principale')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬅️');
-            
-            // Layout componenti mobile-friendly
-            const row1 = new ActionRowBuilder().addComponents(selectMenu);
-            const row2 = new ActionRowBuilder().addComponents(toggleButton, previewButton, backButton);
-            const row3 = new ActionRowBuilder().addComponents(saveButton, cancelButton);
-            
-            await interaction.update({
-                embeds: [embed],
-                components: [row1, row2, row3],
-                ephemeral: true
-            });
-            
-        } catch (error) {
-            console.error('Errore welcome config:', error);
-            await interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Errore di Sistema', 
-                    'Impossibile caricare la configurazione. Riprova tra poco o contatta il supporto.')],
-                ephemeral: true
-            });
-        }
-    }
-};
+// Handler centrale collector/interaction per dashboard welcome
+async function handleWelcomeInteraction(interaction, allChannels) {
+  // Carica sempre la config aggiornata dopo ogni salvataggio!
+  const config = await db.getGuildConfig(interaction.guildId);
+
+  if (interaction.isStringSelectMenu() && interaction.customId === 'welcome_channel_select') {
+    const newVal = interaction.values[0] === 'none' ? null : interaction.values[0];
+    await db.updateGuildConfig(interaction.guildId, { welcomeChannelId: newVal });
+  }
+  if (interaction.isButton() && interaction.customId === 'welcome_toggle') {
+    await db.updateGuildConfig(interaction.guildId, { welcomeEnabled: !config.welcomeEnabled });
+  }
+
+  // Dopo ogni salvataggio rileggi la config aggiornata e aggiorna la UI
+  const refreshedConfig = await db.getGuildConfig(interaction.guildId);
+
+  // Re-render della dashboard: la preview e i componenti vengono aggiornati subito
+  await interaction.update({
+    embeds: [buildWelcomeEmbed(refreshedConfig)],
+    components: buildWelcomeComponents(refreshedConfig, allChannels),
+    ephemeral: true
+  });
+}
+
+module.exports = { buildWelcomeEmbed, buildWelcomeComponents, handleWelcomeInteraction };
