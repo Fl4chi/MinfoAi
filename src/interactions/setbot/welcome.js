@@ -66,6 +66,7 @@ function buildDashboard(interaction) {
         .setEmoji(cfg.welcomeEnabled ? '🔴' : '🟢')
     )
   ];
+
   return { embed, rows };
 }
 
@@ -187,6 +188,11 @@ module.exports = {
       console.error('[welcome] Error in handleWelcome:', error);
       return interaction.reply({ content: '❌ Errore nel caricamento della dashboard.', ephemeral: true }).catch(() => {});
     }
+  },
+  
+  // Alias for compatibility with setbot.js
+  async showPanel(interaction, config) {
+    return this.handleWelcome(interaction);
   },
   
   // Router for selects/buttons
