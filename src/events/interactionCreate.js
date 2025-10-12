@@ -1,5 +1,4 @@
 const { Events } = require('discord.js');
-const { logActivity } = require('../logs/activityLog');
 
 // Import dashboard handlers
 const verification = require('../interactions/setbot/verification');
@@ -18,49 +17,14 @@ module.exports = {
       const command = interaction.client.commands.get(interaction.commandName);
       if (!command) {
         console.error(`No command matching ${interaction.commandName} was found.`);
-        
-        // Log comando non trovato
-        logActivity('error', 'command_not_found', {
-          commandName: interaction.commandName,
-          userId: interaction.user.id,
-          username: interaction.user.tag,
-          guildId: interaction.guildId,
-          guildName: interaction.guild?.name
-        });
-        
         return;
       }
-      
+
       try {
-        // Log esecuzione comando
-        logActivity('command', interaction.commandName, {
-          userId: interaction.user.id,
-          username: interaction.user.tag,
-          guildId: interaction.guildId,
-          guildName: interaction.guild?.name,
-          channelId: interaction.channelId,
-          options: interaction.options.data.map(opt => ({
-            name: opt.name,
-            value: opt.value
-          }))
-        });
-        
         await command.execute(interaction);
-        
       } catch (error) {
         console.error(`Error executing ${interaction.commandName}:`, error);
-        
-        // Log errore esecuzione comando
-        logActivity('error', 'command_execution_error', {
-          commandName: interaction.commandName,
-          userId: interaction.user.id,
-          username: interaction.user.tag,
-          guildId: interaction.guildId,
-          guildName: interaction.guild?.name,
-          errorMessage: error.message,
-          errorStack: error.stack
-        });
-        
+
         // Robust error handling with reply safety
         const errorMessage = {
           content: 'There was an error while executing this command!',
@@ -77,21 +41,12 @@ module.exports = {
         }
       }
     }
-    
+
     // Handle button interactions
     // REFACTOR: Route dashboard button interactions to onComponent handlers
     else if (interaction.isButton()) {
       console.log(`Button interaction: ${interaction.customId}`);
-      
-      // Log interazione bottone
-      logActivity('event', 'button_interaction', {
-        customId: interaction.customId,
-        userId: interaction.user.id,
-        username: interaction.user.tag,
-        guildId: interaction.guildId,
-        guildName: interaction.guild?.name
-      });
-      
+
       // Route to appropriate dashboard handler
       const id = interaction.customId;
       try {
@@ -117,29 +72,14 @@ module.exports = {
         }
       } catch (error) {
         console.error(`Error handling button interaction ${id}:`, error);
-        logActivity('error', 'button_interaction_error', {
-          customId: id,
-          errorMessage: error.message,
-          errorStack: error.stack
-        });
       }
     }
-    
+
     // Handle select menu interactions
     // REFACTOR: Route dashboard select menu interactions to onComponent handlers
     else if (interaction.isStringSelectMenu()) {
       console.log(`Select menu interaction: ${interaction.customId}`);
-      
-      // Log interazione menu
-      logActivity('event', 'select_menu_interaction', {
-        customId: interaction.customId,
-        values: interaction.values,
-        userId: interaction.user.id,
-        username: interaction.user.tag,
-        guildId: interaction.guildId,
-        guildName: interaction.guild?.name
-      });
-      
+
       // Route to appropriate dashboard handler
       const id = interaction.customId;
       try {
@@ -162,28 +102,14 @@ module.exports = {
         }
       } catch (error) {
         console.error(`Error handling select menu interaction ${id}:`, error);
-        logActivity('error', 'select_menu_interaction_error', {
-          customId: id,
-          errorMessage: error.message,
-          errorStack: error.stack
-        });
       }
     }
-    
+
     // Handle modal submissions
     // REFACTOR: Route dashboard modal submissions to onModal handlers
     else if (interaction.isModalSubmit()) {
       console.log(`Modal submit interaction: ${interaction.customId}`);
-      
-      // Log interazione modal
-      logActivity('event', 'modal_submit_interaction', {
-        customId: interaction.customId,
-        userId: interaction.user.id,
-        username: interaction.user.tag,
-        guildId: interaction.guildId,
-        guildName: interaction.guild?.name
-      });
-      
+
       // Route to appropriate dashboard handler
       const id = interaction.customId;
       try {
@@ -206,11 +132,6 @@ module.exports = {
         }
       } catch (error) {
         console.error(`Error handling modal submit interaction ${id}:`, error);
-        logActivity('error', 'modal_submit_interaction_error', {
-          customId: id,
-          errorMessage: error.message,
-          errorStack: error.stack
-        });
       }
     }
   },
