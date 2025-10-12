@@ -1,276 +1,148 @@
-const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
-const GuildConfig = require('../../database/models/GuildConfig');
+// Refactored: 2025-10-12 - Dashboard giveaway con aggiornamento live immediato
+// Pattern: onComponent, onModal, buildDashboard (ref: verification.js)
 
-// UX Helper: Genera paginazione intuitiva
-function createPagination(currentPage, totalPages, customIdPrefix) {
-    const buttons = [];
-    
-    if (totalPages > 2) {
-        buttons.push(new ButtonBuilder()
-            .setCustomId(`${customIdPrefix}_first`)
-            .setEmoji('⏮️')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(currentPage === 1));
-    }
-    
-    buttons.push(new ButtonBuilder()
-        .setCustomId(`${customIdPrefix}_prev`)
-        .setLabel('Indietro')
-        .setEmoji('◀️')
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(currentPage === 1));
-    
-    buttons.push(new ButtonBuilder()
-        .setCustomId(`${customIdPrefix}_page_indicator`)
-        .setLabel(`Pagina ${currentPage}/${totalPages}`)
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(true));
-    
-    buttons.push(new ButtonBuilder()
-        .setCustomId(`${customIdPrefix}_next`)
-        .setLabel('Avanti')
-        .setEmoji('▶️')
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(currentPage === totalPages));
-    
-    if (totalPages > 2) {
-        buttons.push(new ButtonBuilder()
-            .setCustomId(`${customIdPrefix}_last`)
-            .setEmoji('⏭️')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(currentPage === totalPages));
-    }
-    
-    return buttons;
+const db = require('../../database/db');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+
+// Helper: get channels
+function getTextChannels(interaction) {
+  return interaction.guild.channels.cache
+    .filter(c => c.type === ChannelType.GuildText)
+    .map(c => ({ label: `#${c.name}`, value: c.id }))
+    .slice(0, 24);
 }
 
-// UX Helper: Crea embed con guida rapida
-function createHelpEmbed(title, description, fields, color = '#E91E63', activeCategory = null) {
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle(`${activeCategory ? '🔹 ' : ''}${title}`)
-        .setDescription(description)
-        .setFooter({ text: '💡 Usa i menu e pulsanti per navigare • Mobile-friendly' })
-        .setTimestamp();
-    
-    if (fields && fields.length > 0) {
-        embed.addFields(fields);
-    }
-    
-    return embed;
+// Helper: ensure config
+function ensureConfig(interaction) {
+  let cfg = interaction.client.guildConfigs.get(interaction.guildId);
+  if (!cfg) {
+    cfg = {
+      guildId: interaction.guildId,
+      giveawayEnabled: false,
+      giveawayChannelId: null,
+      giveawayDuration: 86400
+    };
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+  }
+  if (cfg.giveawayDuration === undefined) cfg.giveawayDuration = 86400;
+  return cfg;
 }
 
-// UX Helper: Feedback success/error visibili
-function createFeedbackEmbed(type, message, details = null) {
-    const colors = {
-        success: '#2ECC71',
-        error: '#E74C3C',
-        warning: '#F39C12',
-        info: '#3498DB'
-    };
-    
-    const emojis = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
-    };
-    
-    const embed = new EmbedBuilder()
-        .setColor(colors[type] || colors.info)
-        .setDescription(`${emojis[type]} **${message}**${details ? `\n\n${details}` : ''}`)
-        .setTimestamp();
-    
-    return embed;
+// Build dashboard embed + components
+function buildDashboard(interaction) {
+  const cfg = ensureConfig(interaction);
+  const channels = getTextChannels(interaction);
+  
+  const embed = new EmbedBuilder()
+    .setTitle('⚙️ Configurazione: Giveaway')
+    .setColor(cfg.giveawayEnabled ? '#43B581' : '#ED4245')
+    .addFields(
+      { name: 'Canale Giveaway', value: cfg.giveawayChannelId ? `<#${cfg.giveawayChannelId}>` : 'Non impostato', inline: false },
+      { name: 'Durata Default', value: `${cfg.giveawayDuration || 86400} secondi`, inline: true },
+      { name: 'Sistema', value: cfg.giveawayEnabled ? '🟢 ON' : '🔴 OFF', inline: true }
+    );
+
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('giveaway_channel_select')
+        .setPlaceholder(cfg.giveawayChannelId ? 'Canale impostato' : 'Seleziona canale giveaway')
+        .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels])
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('giveaway_set_duration')
+        .setLabel('Imposta Durata')
+        .setStyle(1)
+        .setEmoji('⏰'),
+      new ButtonBuilder()
+        .setCustomId('giveaway_toggle')
+        .setLabel(cfg.giveawayEnabled ? 'Disattiva' : 'Attiva')
+        .setStyle(cfg.giveawayEnabled ? 4 : 3)
+    )
+  ];
+
+  return { embed, rows };
+}
+
+// Handle select menu changes
+async function handleSelect(interaction, value) {
+  await interaction.deferUpdate();
+  const cfg = ensureConfig(interaction);
+  const newVal = value === 'none' ? null : value;
+  cfg.giveawayChannelId = newVal;
+  await db.updateGuildConfig(interaction.guildId, { giveawayChannelId: newVal });
+  interaction.client.guildConfigs.set(interaction.guildId, cfg);
+  const { embed, rows } = buildDashboard(interaction);
+  return interaction.editReply({ embeds: [embed], components: rows });
+}
+
+// Handle button clicks
+async function handleComponent(interaction) {
+  const id = interaction.customId;
+  
+  if (id === 'giveaway_toggle') {
+    await interaction.deferUpdate();
+    const cfg = ensureConfig(interaction);
+    cfg.giveawayEnabled = !cfg.giveawayEnabled;
+    await db.updateGuildConfig(interaction.guildId, { giveawayEnabled: cfg.giveawayEnabled });
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  }
+
+  if (id === 'giveaway_set_duration') {
+    const modal = new ModalBuilder()
+      .setCustomId('giveaway_duration_modal')
+      .setTitle('Imposta Durata Default');
+    const input = new TextInputBuilder()
+      .setCustomId('giveaway_duration_input')
+      .setLabel('Durata in secondi')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('86400 (24 ore)')
+      .setRequired(true)
+      .setValue(String(ensureConfig(interaction).giveawayDuration || 86400));
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+}
+
+// Handle modal submits
+async function handleModals(interaction) {
+  if (interaction.customId === 'giveaway_duration_modal') {
+    await interaction.deferUpdate();
+    const duration = parseInt(interaction.fields.getTextInputValue('giveaway_duration_input')) || 86400;
+    const cfg = ensureConfig(interaction);
+    cfg.giveawayDuration = duration;
+    await db.updateGuildConfig(interaction.guildId, { giveawayDuration: duration });
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  }
 }
 
 module.exports = {
-    customId: 'giveaway',
-    
-    async execute(interaction) {
-        // Verifica permessi
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-            return interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Permessi Insufficienti', 
-                    'Ti serve il permesso **Gestisci Server** per configurare i giveaway.')],
-                ephemeral: true
-            });
-        }
-        
-        try {
-            // Carica config attuale
-            const config = await GuildConfig.findOne({ guildId: interaction.guild.id }) || {};
-            const giveawayConfig = config.giveaway || {};
-            
-            // Check permessi bot
-            const botMember = interaction.guild.members.me;
-            const canSendMessages = botMember.permissions.has(PermissionFlagsBits.SendMessages);
-            const canManageMessages = botMember.permissions.has(PermissionFlagsBits.ManageMessages);
-            const canAddReactions = botMember.permissions.has(PermissionFlagsBits.AddReactions);
-            
-            // Embed principale con highlight categoria attiva
-            const embed = createHelpEmbed(
-                '🎁 Configurazione Giveaway',
-                '**Sistema Giveaway Automatico e Personalizzabile**\n\n' +
-                'Crea giveaway coinvolgenti per il tuo server con estrazione automatica, ' +
-                'requisiti personalizzati e protezione anti-bot.\n\n' +
-                '**📋 Funzionalità Disponibili:**\n' +
-                (canSendMessages && canManageMessages && canAddReactions ? '✅' : '⚠️') + ' Giveaway automatici programmabili\n' +
-                '✅ Requisiti personalizzati (ruoli, livelli, account age)\n' +
-                '✅ Sistema anti-bot e anti-alt accounts\n' +
-                '✅ Riestrazione automatica se vincitore non valido\n' +
-                (canSendMessages ? '✅' : '⚠️') + ' Notifiche automatiche vincitori\n' +
-                '✅ Cronologia giveaway completa\n\n' +
-                ((!canSendMessages || !canManageMessages || !canAddReactions) ? 
-                    '⚠️ **Attenzione**: Il bot necessita permessi aggiuntivi per funzionare\n\n' : '') +
-                '👇 **Seleziona cosa configurare dal menu:**',
-                [
-                    {
-                        name: '📊 Stato Corrente',
-                        value: `\`\`\`\n` +
-                            `Canale Default: ${giveawayConfig.channelId ? '<#' + giveawayConfig.channelId + '>' : '❌ Non impostato'}\n` +
-                            `Ruolo Ping: ${giveawayConfig.pingRoleId ? '<@&' + giveawayConfig.pingRoleId + '>' : '❌ Non impostato'}\n` +
-                            `Durata Default: ${giveawayConfig.defaultDuration || '7 giorni (default)'}\n` +
-                            `Livello Minimo: ${giveawayConfig.minLevel ? 'Livello ' + giveawayConfig.minLevel : '❌ Nessun requisito'}\n` +
-                            `Anti-Alt: ${giveawayConfig.minAccountAge ? giveawayConfig.minAccountAge + ' giorni' : '❌ Disabilitato'}\n` +
-                            `Giveaway Attivi: ${giveawayConfig.activeGiveaways?.length || 0}\n` +
-                            `\`\`\``,
-                        inline: false
-                    }
-                ],
-                '#E91E63',
-                'giveaway'
-            );
-            
-            // Menu opzioni con filtri permessi
-            const baseOptions = [
-                {
-                    label: '🎉 Crea Giveaway',
-                    description: 'Avvia un nuovo giveaway interattivo',
-                    value: 'giveaway_create',
-                    emoji: '🎉',
-                    requiredBotPermission: canSendMessages && canManageMessages && canAddReactions
-                },
-                {
-                    label: '📢 Canale Default',
-                    description: 'Imposta dove pubblicare i giveaway',
-                    value: 'giveaway_set_channel',
-                    emoji: '📢'
-                },
-                {
-                    label: '🔔 Ruolo Notifica',
-                    description: 'Ruolo da pingare per nuovi giveaway',
-                    value: 'giveaway_ping_role',
-                    emoji: '🔔'
-                },
-                {
-                    label: '✅ Requisiti Partecipazione',
-                    description: 'Livello minimo, ruoli richiesti, anti-alt',
-                    value: 'giveaway_requirements',
-                    emoji: '✅'
-                },
-                {
-                    label: '⏰ Durata Default',
-                    description: 'Imposta durata predefinita (es. 7d, 24h)',
-                    value: 'giveaway_duration',
-                    emoji: '⏰'
-                },
-                {
-                    label: '📋 Giveaway Attivi',
-                    description: 'Visualizza, modifica o termina in anticipo',
-                    value: 'giveaway_list',
-                    emoji: '📋'
-                },
-                {
-                    label: '📈 Cronologia',
-                    description: 'Storico giveaway passati e vincitori',
-                    value: 'giveaway_history',
-                    emoji: '📈'
-                }
-            ];
-            
-            // Filtra opzioni per permessi bot
-            const availableOptions = baseOptions.filter(opt => {
-                if (opt.requiredBotPermission !== undefined && !opt.requiredBotPermission) {
-                    return false;
-                }
-                return true;
-            });
-            
-            // Aggiungi info permessi mancanti
-            if (availableOptions.length < baseOptions.length) {
-                availableOptions.push({
-                    label: '⚠️ Opzioni Nascoste',
-                    description: 'Bot necessita permessi: Messaggi, Reazioni',
-                    value: 'giveaway_permissions_info',
-                    emoji: 'ℹ️'
-                });
-            }
-            
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId('giveaway_config_option')
-                .setPlaceholder('🔧 Scegli cosa configurare...')
-                .addOptions(availableOptions.map(opt => ({
-                    label: opt.label,
-                    description: opt.description,
-                    value: opt.value,
-                    emoji: opt.emoji
-                })));
-            
-            // Pulsanti azione principali
-            const createButton = new ButtonBuilder()
-                .setCustomId('giveaway_quick_create')
-                .setLabel('Crea Rapido')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('⚡')
-                .setDisabled(!giveawayConfig.channelId || !canSendMessages);
-            
-            const previewButton = new ButtonBuilder()
-                .setCustomId('giveaway_preview')
-                .setLabel('Anteprima')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('👁️')
-                .setDisabled(!giveawayConfig.channelId);
-            
-            const saveButton = new ButtonBuilder()
-                .setCustomId('giveaway_save')
-                .setLabel('Salva')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('💾')
-                .setDisabled(true); // Abilitato dopo modifiche
-            
-            const cancelButton = new ButtonBuilder()
-                .setCustomId('giveaway_cancel')
-                .setLabel('Annulla')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('❌');
-            
-            const backButton = new ButtonBuilder()
-                .setCustomId('setbot_back')
-                .setLabel('Menu Principale')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬅️');
-            
-            // Layout componenti mobile-friendly
-            const row1 = new ActionRowBuilder().addComponents(selectMenu);
-            const row2 = new ActionRowBuilder().addComponents(createButton, previewButton, backButton);
-            const row3 = new ActionRowBuilder().addComponents(saveButton, cancelButton);
-            
-            await interaction.update({
-                embeds: [embed],
-                components: [row1, row2, row3],
-                ephemeral: true
-            });
-            
-        } catch (error) {
-            console.error('Errore giveaway config:', error);
-            await interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Errore di Sistema', 
-                    'Impossibile caricare la configurazione. Riprova tra poco o contatta il supporto.')],
-                ephemeral: true
-            });
-        }
+  // Entrypoint to render dashboard
+  async handleGiveaway(interaction) {
+    const { embed, rows } = buildDashboard(interaction);
+    if (interaction.replied || interaction.deferred) {
+      return interaction.editReply({ embeds: [embed], components: rows });
     }
+    return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+  },
+
+  // Router for selects/buttons
+  async onComponent(interaction) {
+    const id = interaction.customId;
+    if (id === 'giveaway_channel_select') {
+      const v = interaction.values?.[0];
+      return handleSelect(interaction, v);
+    }
+    return handleComponent(interaction);
+  },
+
+  // Router for modals
+  async onModal(interaction) {
+    return handleModals(interaction);
+  }
 };
