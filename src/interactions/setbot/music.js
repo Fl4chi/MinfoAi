@@ -1,237 +1,150 @@
-const { EmbedBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, RoleSelectMenuBuilder, PermissionFlagsBits } = require('discord.js');
-const GuildConfig = require('../../database/models/GuildConfig');
+// Refactored: 2025-10-12 - Dashboard music con aggiornamento live immediato
+// Pattern: onComponent, onModal, buildDashboard (ref: verification.js)
 
-// UX Helper: Crea embed con guida rapida
-function createHelpEmbed(title, description, fields, color = '#9B59B6', activeCategory = null) {
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle(`${activeCategory ? '🔹 ' : ''}${title}`)
-        .setDescription(description)
-        .setFooter({ text: '💡 Usa i menu e pulsanti per navigare • Mobile-friendly' })
-        .setTimestamp();
-    
-    if (fields && fields.length > 0) {
-        embed.addFields(fields);
-    }
-    
-    return embed;
+const db = require('../../database/db');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+
+// Helper: get voice channels
+function getVoiceChannels(interaction) {
+  return interaction.guild.channels.cache
+    .filter(c => c.type === ChannelType.GuildVoice)
+    .map(c => ({ label: c.name, value: c.id }))
+    .slice(0, 24);
 }
 
-// UX Helper: Feedback success/error visibili
-function createFeedbackEmbed(type, message, details = null) {
-    const colors = {
-        success: '#2ECC71',
-        error: '#E74C3C',
-        warning: '#F39C12',
-        info: '#3498DB'
+// Helper: ensure config
+function ensureConfig(interaction) {
+  let cfg = interaction.client.guildConfigs.get(interaction.guildId);
+  if (!cfg) {
+    cfg = {
+      guildId: interaction.guildId,
+      musicEnabled: false,
+      musicVoiceChannelId: null,
+      musicVolume: 50
     };
-    
-    const emojis = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️',
-        info: 'ℹ️'
-    };
-    
-    const embed = new EmbedBuilder()
-        .setColor(colors[type] || colors.info)
-        .setDescription(`${emojis[type]} **${message}**${details ? `\n\n${details}` : ''}`)
-        .setTimestamp();
-    
-    return embed;
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+  }
+  if (cfg.musicVolume === undefined) cfg.musicVolume = 50;
+  return cfg;
+}
+
+// Build dashboard embed + components
+function buildDashboard(interaction) {
+  const cfg = ensureConfig(interaction);
+  const channels = getVoiceChannels(interaction);
+  
+  const embed = new EmbedBuilder()
+    .setTitle('⚙️ Configurazione: Music')
+    .setColor(cfg.musicEnabled ? '#43B581' : '#ED4245')
+    .addFields(
+      { name: 'Canale Vocale', value: cfg.musicVoiceChannelId ? `<#${cfg.musicVoiceChannelId}>` : 'Non impostato', inline: false },
+      { name: 'Volume', value: `${cfg.musicVolume || 50}%`, inline: true },
+      { name: 'Sistema', value: cfg.musicEnabled ? '🟢 ON' : '🔴 OFF', inline: true }
+    );
+
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('music_channel_select')
+        .setPlaceholder(cfg.musicVoiceChannelId ? 'Canale impostato' : 'Seleziona canale vocale')
+        .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels])
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('music_set_volume')
+        .setLabel('Imposta Volume')
+        .setStyle(1)
+        .setEmoji('🔊'),
+      new ButtonBuilder()
+        .setCustomId('music_toggle')
+        .setLabel(cfg.musicEnabled ? 'Disattiva' : 'Attiva')
+        .setStyle(cfg.musicEnabled ? 4 : 3)
+    )
+  ];
+
+  return { embed, rows };
+}
+
+// Handle select menu changes
+async function handleSelect(interaction, value) {
+  await interaction.deferUpdate();
+  const cfg = ensureConfig(interaction);
+  const newVal = value === 'none' ? null : value;
+  cfg.musicVoiceChannelId = newVal;
+  await db.updateGuildConfig(interaction.guildId, { musicVoiceChannelId: newVal });
+  interaction.client.guildConfigs.set(interaction.guildId, cfg);
+  const { embed, rows } = buildDashboard(interaction);
+  return interaction.editReply({ embeds: [embed], components: rows });
+}
+
+// Handle button clicks
+async function handleComponent(interaction) {
+  const id = interaction.customId;
+  
+  if (id === 'music_toggle') {
+    await interaction.deferUpdate();
+    const cfg = ensureConfig(interaction);
+    cfg.musicEnabled = !cfg.musicEnabled;
+    await db.updateGuildConfig(interaction.guildId, { musicEnabled: cfg.musicEnabled });
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  }
+
+  if (id === 'music_set_volume') {
+    const modal = new ModalBuilder()
+      .setCustomId('music_volume_modal')
+      .setTitle('Imposta Volume');
+    const input = new TextInputBuilder()
+      .setCustomId('music_volume_input')
+      .setLabel('Volume (0-100)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('50')
+      .setRequired(true)
+      .setValue(String(ensureConfig(interaction).musicVolume || 50));
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+}
+
+// Handle modal submits
+async function handleModals(interaction) {
+  if (interaction.customId === 'music_volume_modal') {
+    await interaction.deferUpdate();
+    let vol = parseInt(interaction.fields.getTextInputValue('music_volume_input')) || 50;
+    if (vol < 0) vol = 0;
+    if (vol > 100) vol = 100;
+    const cfg = ensureConfig(interaction);
+    cfg.musicVolume = vol;
+    await db.updateGuildConfig(interaction.guildId, { musicVolume: vol });
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  }
 }
 
 module.exports = {
-    customId: 'music',
-    
-    async execute(interaction) {
-        // Verifica permessi
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-            return interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Permessi Insufficienti', 
-                    'Ti serve il permesso **Gestisci Server** per configurare la musica.')],
-                ephemeral: true
-            });
-        }
-        
-        try {
-            // Carica config attuale
-            const config = await GuildConfig.findOne({ guildId: interaction.guild.id }) || {};
-            const musicConfig = config.music || {};
-            
-            // Check permessi bot
-            const botMember = interaction.guild.members.me;
-            const canConnect = botMember.permissions.has(PermissionFlagsBits.Connect);
-            const canSpeak = botMember.permissions.has(PermissionFlagsBits.Speak);
-            const canManageRoles = botMember.permissions.has(PermissionFlagsBits.ManageRoles);
-            
-            // Embed principale con highlight categoria attiva
-            const embed = createHelpEmbed(
-                '🎵 Configurazione Musica',
-                '**Sistema Musicale Completo per il Tuo Server**\n\n' +
-                'Riproduci musica di alta qualità con supporto YouTube, Spotify, SoundCloud. ' +
-                'Controlli avanzati, filtri audio, code personalizzate e modalità DJ.\n\n' +
-                '**📋 Funzionalità Disponibili:**\n' +
-                (canConnect && canSpeak ? '✅' : '⚠️') + ' Riproduzione musica multi-piattaforma\n' +
-                '✅ Controlli player avanzati (play, pause, skip, stop)\n' +
-                '✅ Sistema code con limite utente personalizzabile\n' +
-                '✅ Volume regolabile (0-100%)\n' +
-                '✅ Filtri audio (bassboost, nightcore, vaporwave, 8D)\n' +
-                (canManageRoles ? '✅' : '⚠️') + ' Modalità DJ con ruolo dedicato\n\n' +
-                ((!canConnect || !canSpeak) ? 
-                    '⚠️ **Attenzione**: Il bot necessita permessi Connetti + Parla nei canali vocali\n\n' : '') +
-                '👇 **Seleziona cosa configurare dal menu:**',
-                [
-                    {
-                        name: '📊 Stato Corrente',
-                        value: `\`\`\`\n` +
-                            `Canale Comandi: ${musicConfig.channelId ? '<#' + musicConfig.channelId + '>' : '❌ Non impostato'}\n` +
-                            `Volume Default: ${musicConfig.defaultVolume || 50}%\n` +
-                            `Modo DJ: ${musicConfig.djMode ? '🟢 ATTIVO' : '🔴 DISATTIVATO'}\n` +
-                            `Ruolo DJ: ${musicConfig.djRoleId ? '<@&' + musicConfig.djRoleId + '>' : '❌ Non impostato'}\n` +
-                            `Limite Coda: ${musicConfig.queueLimit ? musicConfig.queueLimit + ' brani/utente' : '♾️ Illimitato'}\n` +
-                            `Filtri Attivi: ${musicConfig.enabledFilters?.length || 0}\n` +
-                            `\`\`\``,
-                        inline: false
-                    },
-                    {
-                        name: '🎶 Piattaforme Supportate',
-                        value: 'YouTube • Spotify • SoundCloud • URL Diretti',
-                        inline: false
-                    }
-                ],
-                '#9B59B6',
-                'music'
-            );
-            
-            // Menu opzioni
-            const baseOptions = [
-                {
-                    label: '📢 Canale Comandi Musica',
-                    description: 'Imposta canale dedicato per comandi /play, /skip, etc',
-                    value: 'music_set_channel',
-                    emoji: '📢'
-                },
-                {
-                    label: '🔊 Volume Predefinito',
-                    description: 'Imposta volume iniziale (0-100%, default: 50%)',
-                    value: 'music_set_volume',
-                    emoji: '🔊'
-                },
-                {
-                    label: '🎧 Modalità DJ',
-                    description: 'Richiedi ruolo DJ per usare comandi musicali',
-                    value: 'music_dj_mode',
-                    emoji: '🎧'
-                },
-                {
-                    label: '🎭 Ruolo DJ',
-                    description: 'Seleziona quale ruolo può controllare la musica',
-                    value: 'music_dj_role',
-                    emoji: '🎭',
-                    requiredBotPermission: canManageRoles
-                },
-                {
-                    label: '📋 Limite Coda',
-                    description: 'Massimo brani per utente (0 = illimitato)',
-                    value: 'music_queue_limit',
-                    emoji: '📋'
-                },
-                {
-                    label: '🎶 Filtri Audio',
-                    description: 'Abilita filtri: bassboost, nightcore, 8D, vaporwave',
-                    value: 'music_filters',
-                    emoji: '🎶'
-                },
-                {
-                    label: '⏯️ Controlli Avanzati',
-                    description: 'Autoplay, loop, shuffle, salvataggio playlist',
-                    value: 'music_advanced',
-                    emoji: '⏯️'
-                }
-            ];
-            
-            // Filtra opzioni per permessi bot
-            const availableOptions = baseOptions.filter(opt => {
-                if (opt.requiredBotPermission !== undefined && !opt.requiredBotPermission) {
-                    return false;
-                }
-                return true;
-            });
-            
-            // Aggiungi info permessi mancanti
-            if (availableOptions.length < baseOptions.length) {
-                availableOptions.push({
-                    label: '⚠️ Opzioni Nascoste',
-                    description: 'Bot necessita permessi: Gestisci Ruoli',
-                    value: 'music_permissions_info',
-                    emoji: 'ℹ️'
-                });
-            }
-            
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId('music_config_option')
-                .setPlaceholder('🔧 Scegli cosa configurare...')
-                .addOptions(availableOptions.map(opt => ({
-                    label: opt.label,
-                    description: opt.description,
-                    value: opt.value,
-                    emoji: opt.emoji
-                })));
-            
-            // Pulsanti azione principali
-            const testButton = new ButtonBuilder()
-                .setCustomId('music_test')
-                .setLabel('Test Player')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('▶️')
-                .setDisabled(!musicConfig.channelId || !canConnect || !canSpeak);
-            
-            const queueButton = new ButtonBuilder()
-                .setCustomId('music_view_queue')
-                .setLabel('Coda')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('📋');
-            
-            const saveButton = new ButtonBuilder()
-                .setCustomId('music_save')
-                .setLabel('Salva')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('💾')
-                .setDisabled(true); // Abilitato dopo modifiche
-            
-            const cancelButton = new ButtonBuilder()
-                .setCustomId('music_cancel')
-                .setLabel('Annulla')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('❌');
-            
-            const backButton = new ButtonBuilder()
-                .setCustomId('setbot_back')
-                .setLabel('Menu Principale')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬅️');
-            
-            // Layout componenti mobile-friendly
-            const row1 = new ActionRowBuilder().addComponents(selectMenu);
-            const row2 = new ActionRowBuilder().addComponents(testButton, queueButton, backButton);
-            const row3 = new ActionRowBuilder().addComponents(saveButton, cancelButton);
-            
-            await interaction.update({
-                embeds: [embed],
-                components: [row1, row2, row3],
-                ephemeral: true
-            });
-            
-        } catch (error) {
-            console.error('Errore music config:', error);
-            await interaction.reply({
-                embeds: [createFeedbackEmbed('error', 
-                    'Errore di Sistema', 
-                    'Impossibile caricare la configurazione. Riprova tra poco o contatta il supporto.')],
-                ephemeral: true
-            });
-        }
+  // Entrypoint to render dashboard
+  async handleMusic(interaction) {
+    const { embed, rows } = buildDashboard(interaction);
+    if (interaction.replied || interaction.deferred) {
+      return interaction.editReply({ embeds: [embed], components: rows });
     }
+    return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+  },
+
+  // Router for selects/buttons
+  async onComponent(interaction) {
+    const id = interaction.customId;
+    if (id === 'music_channel_select') {
+      const v = interaction.values?.[0];
+      return handleSelect(interaction, v);
+    }
+    return handleComponent(interaction);
+  },
+
+  // Router for modals
+  async onModal(interaction) {
+    return handleModals(interaction);
+  }
 };
