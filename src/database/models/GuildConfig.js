@@ -1,163 +1,119 @@
-// Mock persistent storage for guild configurations
-const guildConfigs = new Map();
+const mongoose = require('mongoose');
 
-/**
- * GuildConfig Model - Manages server configuration with persistent mock storage
- */
-class GuildConfig {
-  /**
-   * Get configuration for a guild
-   * @param {string} guildId - Discord guild ID
-   * @returns {Object} Guild configuration object
-   */
-  static async get(guildId) {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
+const guildConfigSchema = new mongoose.Schema({
+  guildId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
+  },
+  
+  // Welcome/Goodbye settings
+  welcomeChannelId: { type: String, default: null },
+  welcomeMessage: { type: String, default: null },
+  welcomeEnabled: { type: Boolean, default: false },
+  goodbyeChannelId: { type: String, default: null },
+  goodbyeMessage: { type: String, default: null },
+  goodbyeEnabled: { type: Boolean, default: false },
+  
+  // Autorole settings
+  autoroleEnabled: { type: Boolean, default: false },
+  autoroles: { type: [String], default: [] },
+  
+  // Verification settings
+  verificationEnabled: { type: Boolean, default: false },
+  verificationChannelId: { type: String, default: null },
+  verifiedRoleId: { type: String, default: null },
+  verificationMessage: { type: String, default: null },
+  
+  // Logging settings
+  logChannelId: { type: String, default: null },
+  logEvents: { type: [String], default: [] },
+  
+  // Moderation settings
+  modLogChannelId: { type: String, default: null },
+  muteRoleId: { type: String, default: null },
+  automodEnabled: { type: Boolean, default: false },
+  automodRules: { type: mongoose.Schema.Types.Mixed, default: {} },
+  
+  // Leveling/Gamification settings
+  levelingEnabled: { type: Boolean, default: false },
+  levelUpChannelId: { type: String, default: null },
+  levelUpMessage: { type: String, default: null },
+  xpMultiplier: { type: Number, default: 1 },
+  levelRoles: { type: mongoose.Schema.Types.Mixed, default: {} },
+  
+  // Music settings
+  musicChannelId: { type: String, default: null },
+  djRoleId: { type: String, default: null },
+  maxQueueSize: { type: Number, default: 100 },
+  defaultVolume: { type: Number, default: 50 },
+  
+  // Giveaway settings
+  giveawayRoleId: { type: String, default: null },
+  giveawayPingEnabled: { type: Boolean, default: false },
+  
+  // Announcement settings
+  announcementChannelId: { type: String, default: null },
+  
+  // Suggestion settings
+  suggestionChannelId: { type: String, default: null },
+  
+  // Ticket settings
+  ticketCategoryId: { type: String, default: null },
+  ticketLogChannelId: { type: String, default: null },
+  
+  // Language settings
+  language: { type: String, default: 'en' },
+  
+  // Prefix
+  prefix: { type: String, default: '!' }
+}, {
+  timestamps: true // Automatically manages createdAt and updatedAt
+});
 
-    // Return existing config or create default
-    if (!guildConfigs.has(guildId)) {
-      guildConfigs.set(guildId, this.createDefault(guildId));
-    }
-
-    return guildConfigs.get(guildId);
+// Static method to get or create guild config
+guildConfigSchema.statics.getGuildConfig = async function(guildId) {
+  if (!guildId) {
+    throw new Error('Guild ID is required');
   }
-
-  /**
-   * Set a configuration value for a guild
-   * @param {string} guildId - Discord guild ID
-   * @param {string} key - Configuration key
-   * @param {any} value - Configuration value
-   * @returns {Object} Updated configuration
-   */
-  static async set(guildId, key, value) {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
-
-    const config = await this.get(guildId);
-    config[key] = value;
-    config.updatedAt = new Date();
-    
-    guildConfigs.set(guildId, config);
-    return config;
+  
+  let config = await this.findOne({ guildId });
+  
+  if (!config) {
+    // Create default configuration
+    config = await this.create({ guildId });
   }
+  
+  return config;
+};
 
-  /**
-   * Set multiple configuration values at once
-   * @param {string} guildId - Discord guild ID
-   * @param {Object} updates - Object with key-value pairs to update
-   * @returns {Object} Updated configuration
-   */
-  static async setMultiple(guildId, updates) {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
-
-    const config = await this.get(guildId);
-    Object.assign(config, updates);
-    config.updatedAt = new Date();
-    
-    guildConfigs.set(guildId, config);
-    return config;
+// Static method to update guild config
+guildConfigSchema.statics.updateGuildConfig = async function(guildId, updates) {
+  if (!guildId) {
+    throw new Error('Guild ID is required');
   }
+  
+  // Ensure config exists
+  await this.getGuildConfig(guildId);
+  
+  // Update with new values
+  const config = await this.findOneAndUpdate(
+    { guildId },
+    { $set: updates },
+    { new: true, runValidators: true }
+  );
+  
+  return config;
+};
 
-  /**
-   * Delete a configuration key
-   * @param {string} guildId - Discord guild ID
-   * @param {string} key - Configuration key to delete
-   * @returns {Object} Updated configuration
-   */
-  static async delete(guildId, key) {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
+// Instance method to update a single field
+guildConfigSchema.methods.setConfig = async function(key, value) {
+  this[key] = value;
+  await this.save();
+  return this;
+};
 
-    const config = await this.get(guildId);
-    delete config[key];
-    config.updatedAt = new Date();
-    
-    guildConfigs.set(guildId, config);
-    return config;
-  }
-
-  /**
-   * Reset guild configuration to defaults
-   * @param {string} guildId - Discord guild ID
-   * @returns {Object} Reset configuration
-   */
-  static async reset(guildId) {
-    if (!guildId) {
-      throw new Error('Guild ID is required');
-    }
-
-    const config = this.createDefault(guildId);
-    guildConfigs.set(guildId, config);
-    return config;
-  }
-
-  /**
-   * Create default configuration for a guild
-   * @param {string} guildId - Discord guild ID
-   * @returns {Object} Default configuration
-   */
-  static createDefault(guildId) {
-    return {
-      guildId,
-      // Welcome/Goodbye settings
-      welcomeChannelId: null,
-      welcomeMessage: null,
-      welcomeEnabled: false,
-      goodbyeChannelId: null,
-      goodbyeMessage: null,
-      goodbyeEnabled: false,
-      // Autorole settings
-      autoroleEnabled: false,
-      autoroles: [],
-      // Verification settings
-      verificationEnabled: false,
-      verificationChannelId: null,
-      verifiedRoleId: null,
-      verificationMessage: null,
-      // Logging settings
-      logChannelId: null,
-      logEvents: [],
-      // Moderation settings
-      modLogChannelId: null,
-      muteRoleId: null,
-      // Leveling settings
-      levelingEnabled: false,
-      levelUpChannelId: null,
-      levelUpMessage: null,
-      // Announcement settings
-      announcementChannelId: null,
-      // Suggestion settings
-      suggestionChannelId: null,
-      // Ticket settings
-      ticketCategoryId: null,
-      ticketLogChannelId: null,
-      // Language settings
-      language: 'en',
-      // Timestamps
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-  }
-
-  /**
-   * Get all guild configurations (for debugging)
-   * @returns {Map} All guild configurations
-   */
-  static getAll() {
-    return guildConfigs;
-  }
-
-  /**
-   * Clear all configurations (for testing)
-   */
-  static clearAll() {
-    guildConfigs.clear();
-  }
-}
+const GuildConfig = mongoose.model('GuildConfig', guildConfigSchema);
 
 module.exports = GuildConfig;
