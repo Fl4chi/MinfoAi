@@ -1,29 +1,19 @@
-// Mock database module for MinfoAi
-// Provides basic guild configuration storage
-
-const guildConfigs = new Map();
+// Database module for MinfoAi
+// Provides guild configuration storage using MongoDB
+const GuildConfig = require('./models/GuildConfig');
 
 /**
  * Get guild configuration
  * @param {string} guildId - The guild ID
- * @returns {Object} Guild configuration object
+ * @returns {Promise<Object>} Guild configuration object
  */
-function getGuildConfig(guildId) {
-  if (!guildConfigs.has(guildId)) {
-    // Return default configuration
-    return {
-      prefix: '!',
-      language: 'en',
-      welcomeChannel: null,
-      logChannel: null,
-      musicChannel: null,
-      autoRole: null,
-      moderationEnabled: false,
-      antiSpam: false,
-      autoMod: false
-    };
+async function getGuildConfig(guildId) {
+  try {
+    return await GuildConfig.getGuildConfig(guildId);
+  } catch (error) {
+    console.error(`Error getting guild config for ${guildId}:`, error);
+    throw error;
   }
-  return guildConfigs.get(guildId);
 }
 
 /**
@@ -33,28 +23,42 @@ function getGuildConfig(guildId) {
  * @returns {Promise<Object>} Updated configuration
  */
 async function updateGuildConfig(guildId, config) {
-  const currentConfig = getGuildConfig(guildId);
-  const updatedConfig = { ...currentConfig, ...config };
-  guildConfigs.set(guildId, updatedConfig);
-  return updatedConfig;
+  try {
+    return await GuildConfig.updateGuildConfig(guildId, config);
+  } catch (error) {
+    console.error(`Error updating guild config for ${guildId}:`, error);
+    throw error;
+  }
 }
 
 /**
  * Delete guild configuration
  * @param {string} guildId - The guild ID
- * @returns {boolean} True if deleted, false otherwise
+ * @returns {Promise<boolean>} True if deleted, false otherwise
  */
-function deleteGuildConfig(guildId) {
-  return guildConfigs.delete(guildId);
+async function deleteGuildConfig(guildId) {
+  try {
+    const result = await GuildConfig.deleteOne({ guildId });
+    return result.deletedCount > 0;
+  } catch (error) {
+    console.error(`Error deleting guild config for ${guildId}:`, error);
+    throw error;
+  }
 }
 
 /**
  * Check if guild has configuration
  * @param {string} guildId - The guild ID
- * @returns {boolean} True if guild has config
+ * @returns {Promise<boolean>} True if guild has config
  */
-function hasGuildConfig(guildId) {
-  return guildConfigs.has(guildId);
+async function hasGuildConfig(guildId) {
+  try {
+    const config = await GuildConfig.findOne({ guildId });
+    return config !== null;
+  } catch (error) {
+    console.error(`Error checking guild config for ${guildId}:`, error);
+    throw error;
+  }
 }
 
 module.exports = {
