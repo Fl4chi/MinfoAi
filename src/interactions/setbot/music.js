@@ -1,6 +1,6 @@
+// Patch: questa dashboard aggiorna in real-time dopo ogni interazione. Sequenza: deferUpdate > update DB > rebuild config > buildDashboard > editReply
 // Refactored: 2025-10-12 - Dashboard music con aggiornamento live immediato
 // Pattern: onComponent, onModal, buildDashboard (ref: verification.js)
-
 const db = require('../../database/db');
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
 
@@ -34,13 +34,14 @@ function buildDashboard(interaction) {
   const channels = getVoiceChannels(interaction);
   
   const embed = new EmbedBuilder()
-    .setTitle('⚙️ Configurazione: Music')
+    .setTitle('⚙️ Configurazione Music')
     .setColor(cfg.musicEnabled ? '#43B581' : '#ED4245')
     .addFields(
       { name: 'Canale Vocale', value: cfg.musicVoiceChannelId ? `<#${cfg.musicVoiceChannelId}>` : 'Non impostato', inline: false },
       { name: 'Volume', value: `${cfg.musicVolume || 50}%`, inline: true },
       { name: 'Sistema', value: cfg.musicEnabled ? '🟢 ON' : '🔴 OFF', inline: true }
-    );
+    )
+    .setTimestamp();
 
   const rows = [
     new ActionRowBuilder().addComponents(
@@ -65,60 +66,94 @@ function buildDashboard(interaction) {
   return { embed, rows };
 }
 
-// Handle select menu changes
+// Handle select menu
 async function handleSelect(interaction, value) {
+  // PATCH: sempre deferUpdate all'inizio
   await interaction.deferUpdate();
   const cfg = ensureConfig(interaction);
-  const newVal = value === 'none' ? null : value;
-  cfg.musicVoiceChannelId = newVal;
-  await db.updateGuildConfig(interaction.guildId, { musicVoiceChannelId: newVal });
-  interaction.client.guildConfigs.set(interaction.guildId, cfg);
+
+  if (value === 'none') {
+    cfg.musicVoiceChannelId = null;
+  } else {
+    cfg.musicVoiceChannelId = value;
+  }
+
+  // PATCH: update DB prima
+  await db.updateGuildConfig(interaction.guildId, { musicVoiceChannelId: cfg.musicVoiceChannelId });
+
+  // PATCH: rebuild config subito prima del dashboard
+  const freshCfg = await db.getGuildConfig(interaction.guildId);
+  if (freshCfg) {
+    interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+  }
+
   const { embed, rows } = buildDashboard(interaction);
+  // PATCH: usa editReply
   return interaction.editReply({ embeds: [embed], components: rows });
 }
 
-// Handle button clicks
+// Handle button
 async function handleComponent(interaction) {
-  const id = interaction.customId;
-  
-  if (id === 'music_toggle') {
+  if (interaction.customId === 'music_toggle') {
+    // PATCH: sempre deferUpdate all'inizio
     await interaction.deferUpdate();
     const cfg = ensureConfig(interaction);
     cfg.musicEnabled = !cfg.musicEnabled;
+
+    // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { musicEnabled: cfg.musicEnabled });
-    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+
+    // PATCH: rebuild config subito prima del dashboard
+    const freshCfg = await db.getGuildConfig(interaction.guildId);
+    if (freshCfg) {
+      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+    }
+
     const { embed, rows } = buildDashboard(interaction);
+    // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
   }
 
-  if (id === 'music_set_volume') {
+  if (interaction.customId === 'music_set_volume') {
     const modal = new ModalBuilder()
       .setCustomId('music_volume_modal')
       .setTitle('Imposta Volume');
     const input = new TextInputBuilder()
-      .setCustomId('music_volume_input')
-      .setLabel('Volume (0-100)')
+      .setCustomId('volume_value')
+      .setLabel('Volume (1-100%)')
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('50')
       .setRequired(true)
       .setValue(String(ensureConfig(interaction).musicVolume || 50));
-    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    const row = new ActionRowBuilder().addComponents(input);
+    modal.addComponents(row);
     return interaction.showModal(modal);
   }
 }
 
-// Handle modal submits
+// Handle modals
 async function handleModals(interaction) {
+  // PATCH: sempre deferUpdate all'inizio
+  await interaction.deferUpdate();
+  const cfg = ensureConfig(interaction);
+
   if (interaction.customId === 'music_volume_modal') {
-    await interaction.deferUpdate();
-    let vol = parseInt(interaction.fields.getTextInputValue('music_volume_input')) || 50;
-    if (vol < 0) vol = 0;
-    if (vol > 100) vol = 100;
-    const cfg = ensureConfig(interaction);
-    cfg.musicVolume = vol;
-    await db.updateGuildConfig(interaction.guildId, { musicVolume: vol });
-    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    const volume = parseInt(interaction.fields.getTextInputValue('volume_value'), 10);
+    if (isNaN(volume) || volume < 1 || volume > 100) {
+      return interaction.editReply({ content: 'Il volume deve essere tra 1 e 100%.', components: [], embeds: [] });
+    }
+    cfg.musicVolume = volume;
+
+    // PATCH: update DB prima
+    await db.updateGuildConfig(interaction.guildId, { musicVolume: volume });
+
+    // PATCH: rebuild config subito prima del dashboard
+    const freshCfg = await db.getGuildConfig(interaction.guildId);
+    if (freshCfg) {
+      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+    }
+
     const { embed, rows } = buildDashboard(interaction);
+    // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
   }
 }
