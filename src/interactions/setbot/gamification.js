@@ -34,108 +34,86 @@ function ensureConfig(interaction) {
 function buildDashboard(interaction) {
   const cfg = ensureConfig(interaction);
   const channels = getTextChannels(interaction);
-
-  const enabled = cfg.gamificationEnabled || false;
-  const xp = cfg.gamificationXpPerMessage || 5;
-  const cooldown = cfg.gamificationXpCooldown || 60;
-  const channelName = cfg.gamificationLevelChannelId
-    ? `<#${cfg.gamificationLevelChannelId}>`
-    : 'Nessun canale';
-
+  
   const embed = new EmbedBuilder()
-    .setTitle('⚙️ Configurazione Gamification')
-    .setColor(0x00ff00)
+    .setTitle('⚙️ Dashboard Gamification')
+    .setColor(cfg.gamificationEnabled ? '#43B581' : '#ED4245')
     .setDescription(
-      `**Status:** ${enabled ? '✅ Abilitato' : '❌ Disabilitato'}\n` +
-      `**XP per Messaggio:** ${xp}\n` +
-      `**Cooldown (sec):** ${cooldown}\n` +
-      `**Canale Livelli:** ${channelName}`
+      `**Sistema:** ${cfg.gamificationEnabled ? '🟢 Attivo' : '🔴 Disattivo'}\n` +
+      `**XP per messaggio:** ${cfg.gamificationXpPerMessage}\n` +
+      `**Cooldown XP:** ${cfg.gamificationXpCooldown}s\n` +
+      `**Canale Level-Up:** ${cfg.gamificationLevelChannelId ? `<#${cfg.gamificationLevelChannelId}>` : 'Nessuno'}`
     )
     .setTimestamp();
 
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('gamification_config_select')
-    .setPlaceholder('Seleziona configurazione')
-    .addOptions(
-      { label: 'Canale Livelli', value: 'channel_level', emoji: '📢' },
-      { label: 'XP per Messaggio', value: 'xp_message', emoji: '🎯' },
-      { label: 'Cooldown XP', value: 'cooldown_xp', emoji: '⏱️' }
-    );
+  const toggleBtn = new ButtonBuilder()
+    .setCustomId('gamification_toggle')
+    .setLabel(cfg.gamificationEnabled ? 'Disabilita' : 'Abilita')
+    .setStyle(cfg.gamificationEnabled ? 4 : 3)
+    .setEmoji(cfg.gamificationEnabled ? '❌' : '✅');
 
-  const row1 = new ActionRowBuilder().addComponents(selectMenu);
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('gamification_toggle')
-      .setLabel(enabled ? 'Disabilita' : 'Abilita')
-      .setStyle(enabled ? 4 : 3)
-  );
+  const xpBtn = new ButtonBuilder()
+    .setCustomId('gamification_set_xp')
+    .setLabel('Imposta XP')
+    .setStyle(1)
+    .setEmoji('🎯');
 
-  return { embed, rows: [row1, row2] };
+  const cooldownBtn = new ButtonBuilder()
+    .setCustomId('gamification_set_cooldown')
+    .setLabel('Imposta Cooldown')
+    .setStyle(1)
+    .setEmoji('⏱️');
+
+  const row1 = new ActionRowBuilder().addComponents(toggleBtn, xpBtn, cooldownBtn);
+  const rows = [row1];
+
+  if (channels.length > 0) {
+    const channelMenu = new StringSelectMenuBuilder()
+      .setCustomId('gamification_levelup_channel_select')
+      .setPlaceholder('Seleziona canale level-up')
+      .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels]);
+    rows.push(new ActionRowBuilder().addComponents(channelMenu));
+  }
+
+  return { embed, rows };
 }
 
 // Handle select menu
-async function handleSelect(interaction, value) {
+async function handleSelect(interaction, channelId) {
   // PATCH: sempre deferUpdate all'inizio
   await interaction.deferUpdate();
   const cfg = ensureConfig(interaction);
 
-  if (value === 'channel_level') {
-    const channels = getTextChannels(interaction);
-    if (channels.length === 0) {
-      return interaction.editReply({ content: 'Nessun canale testuale disponibile.', components: [], embeds: [] });
-    }
-    const select = new StringSelectMenuBuilder()
-      .setCustomId('gamification_channel_level_select')
-      .setPlaceholder('Scegli canale livelli')
-      .addOptions(channels);
-    const row = new ActionRowBuilder().addComponents(select);
-    return interaction.editReply({ content: 'Seleziona il canale per i livelli:', components: [row], embeds: [] });
-  }
+  const newId = channelId === 'none' ? null : channelId;
+  cfg.gamificationLevelChannelId = newId;
 
-  if (value === 'xp_message') {
-    const modal = new ModalBuilder()
-      .setCustomId('gamification_xp_modal')
-      .setTitle('XP per Messaggio');
-    const input = new TextInputBuilder()
-      .setCustomId('xp_value')
-      .setLabel('XP per Messaggio (es: 5)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setValue(String(cfg.gamificationXpPerMessage || 5));
-    const row = new ActionRowBuilder().addComponents(input);
-    modal.addComponents(row);
-    return interaction.showModal(modal);
-  }
+  // PATCH: update DB prima
+  await db.updateGuildConfig(interaction.guildId, { gamificationLevelChannelId: newId });
 
-  if (value === 'cooldown_xp') {
-    const modal = new ModalBuilder()
-      .setCustomId('gamification_cooldown_modal')
-      .setTitle('Cooldown XP');
-    const input = new TextInputBuilder()
-      .setCustomId('cooldown_value')
-      .setLabel('Cooldown in secondi (es: 60)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setValue(String(cfg.gamificationXpCooldown || 60));
-    const row = new ActionRowBuilder().addComponents(input);
-    modal.addComponents(row);
-    return interaction.showModal(modal);
+  // PATCH: rebuild config subito prima del dashboard
+  const freshCfg = await db.getGuildConfig(interaction.guildId);
+  if (freshCfg) {
+    interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
   }
 
   const { embed, rows } = buildDashboard(interaction);
+  // PATCH: usa editReply
   return interaction.editReply({ embeds: [embed], components: rows });
 }
 
-// Handle button
+// Handle buttons
 async function handleComponent(interaction) {
-  if (interaction.customId === 'gamification_toggle') {
+  const id = interaction.customId;
+  const cfg = ensureConfig(interaction);
+
+  if (id === 'gamification_toggle') {
     // PATCH: sempre deferUpdate all'inizio
     await interaction.deferUpdate();
-    const cfg = ensureConfig(interaction);
-    cfg.gamificationEnabled = !cfg.gamificationEnabled;
+    const newVal = !cfg.gamificationEnabled;
+    cfg.gamificationEnabled = newVal;
 
     // PATCH: update DB prima
-    await db.updateGuildConfig(interaction.guildId, { gamificationEnabled: cfg.gamificationEnabled });
+    await db.updateGuildConfig(interaction.guildId, { gamificationEnabled: newVal });
 
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
@@ -148,25 +126,44 @@ async function handleComponent(interaction) {
     return interaction.editReply({ embeds: [embed], components: rows });
   }
 
-  if (interaction.customId === 'gamification_channel_level_select') {
-    // PATCH: sempre deferUpdate all'inizio
-    await interaction.deferUpdate();
-    const cfg = ensureConfig(interaction);
-    const channelId = interaction.values?.[0];
-    cfg.gamificationLevelChannelId = channelId;
+  if (id === 'gamification_set_xp') {
+    const modal = new ModalBuilder()
+      .setCustomId('gamification_xp_modal')
+      .setTitle('Imposta XP per Messaggio');
 
-    // PATCH: update DB prima
-    await db.updateGuildConfig(interaction.guildId, { gamificationLevelChannelId: channelId });
+    const input = new TextInputBuilder()
+      .setCustomId('xp_value')
+      .setLabel('XP per messaggio')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('5')
+      .setValue(String(cfg.gamificationXpPerMessage || 5))
+      .setRequired(true)
+      .setMinLength(1)
+      .setMaxLength(3);
 
-    // PATCH: rebuild config subito prima del dashboard
-    const freshCfg = await db.getGuildConfig(interaction.guildId);
-    if (freshCfg) {
-      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-    }
+    const row = new ActionRowBuilder().addComponents(input);
+    modal.addComponents(row);
+    return interaction.showModal(modal);
+  }
 
-    const { embed, rows } = buildDashboard(interaction);
-    // PATCH: usa editReply
-    return interaction.editReply({ embeds: [embed], components: rows });
+  if (id === 'gamification_set_cooldown') {
+    const modal = new ModalBuilder()
+      .setCustomId('gamification_cooldown_modal')
+      .setTitle('Imposta Cooldown XP');
+
+    const input = new TextInputBuilder()
+      .setCustomId('cooldown_value')
+      .setLabel('Cooldown (secondi)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('60')
+      .setValue(String(cfg.gamificationXpCooldown || 60))
+      .setRequired(true)
+      .setMinLength(1)
+      .setMaxLength(4);
+
+    const row = new ActionRowBuilder().addComponents(input);
+    modal.addComponents(row);
+    return interaction.showModal(modal);
   }
 }
 
@@ -179,7 +176,7 @@ async function handleModals(interaction) {
   if (interaction.customId === 'gamification_xp_modal') {
     const xp = parseInt(interaction.fields.getTextInputValue('xp_value'), 10);
     if (isNaN(xp) || xp < 1 || xp > 100) {
-      return interaction.editReply({ content: 'XP deve essere tra 1 e 100.', components: [], embeds: [] });
+      return interaction.editReply({ content: 'L\'XP deve essere tra 1 e 100.', components: [], embeds: [] });
     }
     cfg.gamificationXpPerMessage = xp;
 
@@ -200,7 +197,7 @@ async function handleModals(interaction) {
   if (interaction.customId === 'gamification_cooldown_modal') {
     const cooldown = parseInt(interaction.fields.getTextInputValue('cooldown_value'), 10);
     if (isNaN(cooldown) || cooldown < 0 || cooldown > 3600) {
-      return interaction.editReply({ content: 'Cooldown deve essere tra 0 e 3600 sec.', components: [], embeds: [] });
+      return interaction.editReply({ content: 'Il cooldown deve essere tra 0 e 3600 secondi.', components: [], embeds: [] });
     }
     cfg.gamificationXpCooldown = cooldown;
 
@@ -228,19 +225,24 @@ module.exports = {
     }
     return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
   },
-
+  
   // Router for selects/buttons
   async onComponent(interaction) {
     const id = interaction.customId;
-    if (id === 'gamification_config_select') {
+    if (id === 'gamification_levelup_channel_select') {
       const v = interaction.values?.[0];
       return handleSelect(interaction, v);
     }
     return handleComponent(interaction);
   },
-
+  
   // Router for modals
   async onModal(interaction) {
     return handleModals(interaction);
+  },
+
+  // Alias for compatibility with setbot.js
+  async showPanel(interaction, config) {
+    return this.handleGamification(interaction);
   }
 };
