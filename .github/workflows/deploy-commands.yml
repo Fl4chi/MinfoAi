@@ -28,5 +28,5 @@ jobs:
       - name: Deploy commands
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          TOKEN: ${{ secrets.TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.TOKEN }}
         run: npm run deploy:cmd
