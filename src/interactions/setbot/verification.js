@@ -1,10 +1,13 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-const { getGuildConfig } = require('../../utils/config');
 
 // ========== HELPER FUNCTIONS ==========
 
 function ensureConfig(interaction) {
-  let cfg = getGuildConfig(interaction.client, interaction.guildId);
+  let cfg = interaction.client.guildConfigs.get(interaction.guildId);
+  if (!cfg) {
+    cfg = {};
+    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+  }
   if (!cfg.verification) {
     cfg.verification = {
       enabled: false,
@@ -160,6 +163,7 @@ async function handleSelect(interaction, value) {
           ephemeral: true
         });
       }
+
       if (!verification.roleId) {
         return interaction.reply({
           content: '❌ Imposta prima un ruolo da assegnare!',
@@ -271,7 +275,9 @@ module.exports = {
   async onVerify(interaction) {
     const cfg = ensureConfig(interaction);
     const v = cfg.verification;
+
     if (!v.roleId) return interaction.reply({ content: 'Ruolo non configurato.', ephemeral: true });
+
     try {
       await interaction.member.roles.add(v.roleId, 'User verified');
       if (v.logChannelId) {
