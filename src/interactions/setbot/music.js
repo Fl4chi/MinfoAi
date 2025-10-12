@@ -58,8 +58,9 @@ function buildDashboard(interaction) {
         .setEmoji('🔊'),
       new ButtonBuilder()
         .setCustomId('music_toggle')
-        .setLabel(cfg.musicEnabled ? 'Disattiva' : 'Attiva')
+        .setLabel(cfg.musicEnabled ? 'Disabilita' : 'Abilita')
         .setStyle(cfg.musicEnabled ? 4 : 3)
+        .setEmoji(cfg.musicEnabled ? '❌' : '✅')
     )
   ];
 
@@ -67,19 +68,16 @@ function buildDashboard(interaction) {
 }
 
 // Handle select menu
-async function handleSelect(interaction, value) {
+async function handleSelect(interaction, channelId) {
   // PATCH: sempre deferUpdate all'inizio
   await interaction.deferUpdate();
   const cfg = ensureConfig(interaction);
 
-  if (value === 'none') {
-    cfg.musicVoiceChannelId = null;
-  } else {
-    cfg.musicVoiceChannelId = value;
-  }
+  const newId = channelId === 'none' ? null : channelId;
+  cfg.musicVoiceChannelId = newId;
 
   // PATCH: update DB prima
-  await db.updateGuildConfig(interaction.guildId, { musicVoiceChannelId: cfg.musicVoiceChannelId });
+  await db.updateGuildConfig(interaction.guildId, { musicVoiceChannelId: newId });
 
   // PATCH: rebuild config subito prima del dashboard
   const freshCfg = await db.getGuildConfig(interaction.guildId);
@@ -92,16 +90,19 @@ async function handleSelect(interaction, value) {
   return interaction.editReply({ embeds: [embed], components: rows });
 }
 
-// Handle button
+// Handle buttons
 async function handleComponent(interaction) {
-  if (interaction.customId === 'music_toggle') {
+  const id = interaction.customId;
+  const cfg = ensureConfig(interaction);
+
+  if (id === 'music_toggle') {
     // PATCH: sempre deferUpdate all'inizio
     await interaction.deferUpdate();
-    const cfg = ensureConfig(interaction);
-    cfg.musicEnabled = !cfg.musicEnabled;
+    const newVal = !cfg.musicEnabled;
+    cfg.musicEnabled = newVal;
 
     // PATCH: update DB prima
-    await db.updateGuildConfig(interaction.guildId, { musicEnabled: cfg.musicEnabled });
+    await db.updateGuildConfig(interaction.guildId, { musicEnabled: newVal });
 
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
@@ -114,16 +115,21 @@ async function handleComponent(interaction) {
     return interaction.editReply({ embeds: [embed], components: rows });
   }
 
-  if (interaction.customId === 'music_set_volume') {
+  if (id === 'music_set_volume') {
     const modal = new ModalBuilder()
       .setCustomId('music_volume_modal')
-      .setTitle('Imposta Volume');
+      .setTitle('Imposta Volume Musica');
+
     const input = new TextInputBuilder()
       .setCustomId('volume_value')
       .setLabel('Volume (1-100%)')
       .setStyle(TextInputStyle.Short)
+      .setPlaceholder('50')
+      .setValue(String(cfg.musicVolume || 50))
       .setRequired(true)
-      .setValue(String(ensureConfig(interaction).musicVolume || 50));
+      .setMinLength(1)
+      .setMaxLength(3);
+
     const row = new ActionRowBuilder().addComponents(input);
     modal.addComponents(row);
     return interaction.showModal(modal);
@@ -167,7 +173,7 @@ module.exports = {
     }
     return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
   },
-
+  
   // Router for selects/buttons
   async onComponent(interaction) {
     const id = interaction.customId;
@@ -177,9 +183,14 @@ module.exports = {
     }
     return handleComponent(interaction);
   },
-
+  
   // Router for modals
   async onModal(interaction) {
     return handleModals(interaction);
+  },
+
+  // Alias for compatibility with setbot.js
+  async showPanel(interaction, config) {
+    return this.handleMusic(interaction);
   }
 };
