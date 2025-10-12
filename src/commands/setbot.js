@@ -13,10 +13,14 @@ module.exports = {
     .setName('setbot')
     .setDescription('Configura il bot')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  
   async execute(interaction) {
     const config = await db.getGuildConfig(interaction.guild.id) || {};
-    await welcomeHandler.showPanel(interaction, config);
+    // Use showPanel if available, otherwise fall back to handleWelcome
+    const fn = welcomeHandler.showPanel || welcomeHandler.handleWelcome;
+    await fn.call(welcomeHandler, interaction, config);
   },
+  
   async onCategorySelect(interaction) {
     const category = interaction.values[0];
     const config = await db.getGuildConfig(interaction.guild.id) || {};
@@ -30,10 +34,25 @@ module.exports = {
       giveaway: giveawayHandler,
       verify: verifyHandler
     };
-
+    
+    const handlerFunctions = {
+      welcome: 'handleWelcome',
+      goodbye: 'handleGoodbye',
+      music: 'handleMusic',
+      moderation: 'handleModeration',
+      gamification: 'handleGamification',
+      giveaway: 'handleGiveaway',
+      verify: 'handleVerification'
+    };
+    
     const handler = handlers[category];
     if (handler) {
-      await handler.showPanel(interaction, config);
+      // Try showPanel first (for compatibility), fallback to specific handle function
+      const fnName = handlerFunctions[category];
+      const fn = handler.showPanel || handler[fnName];
+      if (fn) {
+        await fn.call(handler, interaction, config);
+      }
     }
   }
 };
