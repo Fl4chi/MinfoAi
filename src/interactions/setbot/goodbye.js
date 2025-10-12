@@ -56,9 +56,13 @@ module.exports = {
         }
         
         try {
-            // Carica config attuale
-            const config = await GuildConfig.findOne({ guildId: interaction.guild.id }) || {};
-            const goodbyeConfig = config.goodbye || {};
+            // Carica config attuale usando il nuovo modello GuildConfig
+            const config = await GuildConfig.get(interaction.guild.id);
+            const goodbyeChannelId = config.goodbyeChannelId || null;
+            const goodbyeMessage = config.goodbyeMessage || null;
+            const goodbyeEnabled = config.goodbyeEnabled || false;
+            const embedColor = config.goodbyeEmbedColor || '#FF4444';
+            const showStats = config.goodbyeShowStats || false;
             
             // Check permessi bot
             const botMember = interaction.guild.members.me;
@@ -85,11 +89,11 @@ module.exports = {
                     {
                         name: '📊 Stato Corrente',
                         value: `\`\`\`\n` +
-                            `Sistema: ${goodbyeConfig.enabled ? '🟢 ATTIVO' : '🔴 DISATTIVATO'}\n` +
-                            `Canale: ${goodbyeConfig.channelId ? '<#' + goodbyeConfig.channelId + '>' : '❌ Non impostato'}\n` +
-                            `Messaggio: ${goodbyeConfig.message ? 'Personalizzato' : 'Default'}\n` +
-                            `Colore Embed: ${goodbyeConfig.embedColor || '#FF4444 (default)'}\n` +
-                            `Statistiche: ${goodbyeConfig.showStats ? '✅ Visibili' : '❌ Nascoste'}\n` +
+                            `Sistema: ${goodbyeEnabled ? '🟢 ATTIVO' : '🔴 DISATTIVATO'}\n` +
+                            `Canale: ${goodbyeChannelId ? '<#' + goodbyeChannelId + '>' : '❌ Non impostato'}\n` +
+                            `Messaggio: ${goodbyeMessage ? 'Personalizzato' : 'Default'}\n` +
+                            `Colore Embed: ${embedColor || '#FF4444 (default)'}\n` +
+                            `Statistiche: ${showStats ? '✅ Visibili' : '❌ Nascoste'}\n` +
                             `\`\`\``,
                         inline: false
                     },
@@ -101,7 +105,7 @@ module.exports = {
                         inline: false
                     }
                 ],
-                goodbyeConfig.embedColor || '#FF4444',
+                embedColor,
                 'goodbye'
             );
             
@@ -178,16 +182,16 @@ module.exports = {
             // Pulsanti azione principali
             const toggleButton = new ButtonBuilder()
                 .setCustomId('goodbye_toggle')
-                .setLabel(goodbyeConfig.enabled ? 'Disabilita Sistema' : 'Abilita Sistema')
-                .setStyle(goodbyeConfig.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
-                .setEmoji(goodbyeConfig.enabled ? '🔴' : '🟢');
+                .setLabel(goodbyeEnabled ? 'Disabilita Sistema' : 'Abilita Sistema')
+                .setStyle(goodbyeEnabled ? ButtonStyle.Danger : ButtonStyle.Success)
+                .setEmoji(goodbyeEnabled ? '🔴' : '🟢');
             
             const previewButton = new ButtonBuilder()
                 .setCustomId('goodbye_preview')
                 .setLabel('Anteprima')
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('👁️')
-                .setDisabled(!goodbyeConfig.channelId || !canSendMessages);
+                .setDisabled(!goodbyeChannelId || !canSendMessages);
             
             const saveButton = new ButtonBuilder()
                 .setCustomId('goodbye_save')
