@@ -1,5 +1,4 @@
 const { Events } = require('discord.js');
-
 // Import dashboard handlers
 const verification = require('../interactions/setbot/verification');
 const welcome = require('../interactions/setbot/welcome');
@@ -8,6 +7,7 @@ const gamification = require('../interactions/setbot/gamification');
 const moderation = require('../interactions/setbot/moderation');
 const music = require('../interactions/setbot/music');
 const giveaway = require('../interactions/setbot/giveaway');
+const setbot = require('../commands/setbot');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -19,12 +19,10 @@ module.exports = {
         console.error(`No command matching ${interaction.commandName} was found.`);
         return;
       }
-
       try {
         await command.execute(interaction);
       } catch (error) {
         console.error(`Error executing ${interaction.commandName}:`, error);
-
         // Robust error handling with reply safety
         const errorMessage = {
           content: 'There was an error while executing this command!',
@@ -41,12 +39,10 @@ module.exports = {
         }
       }
     }
-
     // Handle button interactions
     // REFACTOR: Route dashboard button interactions to onComponent handlers
     else if (interaction.isButton()) {
       console.log(`Button interaction: ${interaction.customId}`);
-
       // Route to appropriate dashboard handler
       const id = interaction.customId;
       try {
@@ -74,16 +70,16 @@ module.exports = {
         console.error(`Error handling button interaction ${id}:`, error);
       }
     }
-
     // Handle select menu interactions
     // REFACTOR: Route dashboard select menu interactions to onComponent handlers
     else if (interaction.isStringSelectMenu()) {
       console.log(`Select menu interaction: ${interaction.customId}`);
-
       // Route to appropriate dashboard handler
       const id = interaction.customId;
       try {
-        if (id.startsWith('verification_') || id === 'verification_config_select') {
+        if (id === 'setbot_category') {
+          await setbot.onCategorySelect(interaction);
+        } else if (id.startsWith('verification_') || id === 'verification_config_select') {
           await verification.onComponent(interaction);
         } else if (id.startsWith('welcome_') || id === 'welcome_config_select') {
           await welcome.onComponent(interaction);
@@ -104,12 +100,10 @@ module.exports = {
         console.error(`Error handling select menu interaction ${id}:`, error);
       }
     }
-
     // Handle modal submissions
     // REFACTOR: Route dashboard modal submissions to onModal handlers
     else if (interaction.isModalSubmit()) {
       console.log(`Modal submit interaction: ${interaction.customId}`);
-
       // Route to appropriate dashboard handler
       const id = interaction.customId;
       try {
