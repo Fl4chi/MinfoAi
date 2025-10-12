@@ -37,180 +37,151 @@ function buildDashboard(interaction) {
   const cfg = ensureConfig(interaction);
   const channels = getTextChannels(interaction);
   
+  const durationHours = Math.floor(cfg.giveawayDuration / 3600);
+  
   const embed = new EmbedBuilder()
-    .setTitle('⚙️ Configurazione: Giveaway')
+    .setTitle('⚙️ Dashboard Giveaway')
     .setColor(cfg.giveawayEnabled ? '#43B581' : '#ED4245')
-    .addFields(
-      { name: 'Canale Giveaway', value: cfg.giveawayChannelId ? `<#${cfg.giveawayChannelId}>` : 'Non impostato', inline: false },
-      { name: 'Durata Default', value: `${cfg.giveawayDuration || 86400} secondi`, inline: true },
-      { name: 'Sistema', value: cfg.giveawayEnabled ? '🟢 ON' : '🔴 OFF', inline: true }
-    );
-
-  const rows = [
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('giveaway_channel_select')
-        .setPlaceholder(cfg.giveawayChannelId ? 'Canale impostato' : 'Seleziona canale giveaway')
-        .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels])
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('giveaway_set_duration')
-        .setLabel('Imposta Durata')
-        .setStyle(1)
-        .setEmoji('⏰'),
-      new ButtonBuilder()
-        .setCustomId('giveaway_toggle')
-        .setLabel(cfg.giveawayEnabled ? 'Disabilita' : 'Abilita')
-        .setStyle(cfg.giveawayEnabled ? 4 : 3)
-        .setEmoji(cfg.giveawayEnabled ? '🔴' : '🟢'),
-      new ButtonBuilder()
-        .setCustomId('giveaway_publish')
-        .setLabel('Pubblica Giveaway')
-        .setStyle(1)
-        .setEmoji('🎉')
-        .setDisabled(!cfg.giveawayEnabled || !cfg.giveawayChannelId)
+    .setDescription(
+      `**Sistema:** ${cfg.giveawayEnabled ? '🟢 Attivo' : '🔴 Disattivo'}\n` +
+      `**Canale:** ${cfg.giveawayChannelId ? `<#${cfg.giveawayChannelId}>` : 'Nessuno'}\n` +
+      `**Durata predefinita:** ${durationHours}h (${cfg.giveawayDuration}s)`
     )
-  ];
+    .setTimestamp();
+
+  const toggleBtn = new ButtonBuilder()
+    .setCustomId('giveaway_toggle')
+    .setLabel(cfg.giveawayEnabled ? 'Disabilita' : 'Abilita')
+    .setStyle(cfg.giveawayEnabled ? 4 : 3)
+    .setEmoji(cfg.giveawayEnabled ? '❌' : '✅');
+
+  const durationBtn = new ButtonBuilder()
+    .setCustomId('giveaway_set_duration')
+    .setLabel('Imposta Durata')
+    .setStyle(1)
+    .setEmoji('⏰');
+
+  const row1 = new ActionRowBuilder().addComponents(toggleBtn, durationBtn);
+  const rows = [row1];
+
+  if (channels.length > 0) {
+    const channelMenu = new StringSelectMenuBuilder()
+      .setCustomId('giveaway_channel_select')
+      .setPlaceholder('Seleziona canale giveaway')
+      .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels]);
+    rows.push(new ActionRowBuilder().addComponents(channelMenu));
+  }
+
   return { embed, rows };
 }
 
-// Handle select menus
-async function handleSelect(interaction, value) {
+// Handle select menu
+async function handleSelect(interaction, channelId) {
   try {
     // PATCH: sempre deferUpdate all'inizio
     await interaction.deferUpdate();
-    
-    const cfg = ensureConfig(interaction);
-    cfg.giveawayChannelId = value === 'none' ? null : value;
-    
+
+    const newId = channelId === 'none' ? null : channelId;
+
     // PATCH: update DB prima
-    await db.updateGuildConfig(interaction.guildId, { giveawayChannelId: cfg.giveawayChannelId });
-    
+    await db.updateGuildConfig(interaction.guildId, { giveawayChannelId: newId });
+
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-    
+
     const { embed, rows } = buildDashboard(interaction);
-    // PATCH: usa editReply invece di reply
+    // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
   } catch (error) {
     console.error('[giveaway] Error in handleSelect:', error);
-    return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento del canale.', embeds: [], components: [] }).catch(() => {});
+    return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento.', embeds: [], components: [] }).catch(() => {});
   }
 }
 
 // Handle buttons
 async function handleComponent(interaction) {
-  const id = interaction.customId;
-  
   try {
+    const id = interaction.customId;
+
     if (id === 'giveaway_toggle') {
       // PATCH: sempre deferUpdate all'inizio
       await interaction.deferUpdate();
-      
       const cfg = ensureConfig(interaction);
-      cfg.giveawayEnabled = !cfg.giveawayEnabled;
-      
+      const newVal = !cfg.giveawayEnabled;
+
       // PATCH: update DB prima
-      await db.updateGuildConfig(interaction.guildId, { giveawayEnabled: cfg.giveawayEnabled });
-      
+      await db.updateGuildConfig(interaction.guildId, { giveawayEnabled: newVal });
+
       // PATCH: rebuild config subito prima del dashboard
       const freshCfg = await db.getGuildConfig(interaction.guildId);
       if (freshCfg) {
         interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
       }
-      
+
       const { embed, rows } = buildDashboard(interaction);
       // PATCH: usa editReply
       return interaction.editReply({ embeds: [embed], components: rows });
     }
-    
-    if (id === 'giveaway_publish') {
-      // PATCH: sempre deferUpdate all'inizio
-      await interaction.deferUpdate();
-      
-      const cfg = ensureConfig(interaction);
-      if (!cfg.giveawayEnabled || !cfg.giveawayChannelId) {
-        return interaction.editReply({ content: '❌ Configura prima il canale e abilita il sistema.', embeds: [], components: [] });
-      }
-      
-      const channel = interaction.guild.channels.cache.get(cfg.giveawayChannelId);
-      if (!channel) {
-        return interaction.editReply({ content: '❌ Canale non trovato.', embeds: [], components: [] });
-      }
-      
-      // Pubblica messaggio di giveaway
-      const giveawayEmbed = new EmbedBuilder()
-        .setTitle('🎉 Nuovo Giveaway!')
-        .setDescription('Reagisci con 🎉 per partecipare!')
-        .setColor('#43B581')
-        .setTimestamp();
-      
-      await channel.send({ embeds: [giveawayEmbed] });
-      
-      // PATCH: rebuild config subito prima del dashboard
-      const freshCfg = await db.getGuildConfig(interaction.guildId);
-      if (freshCfg) {
-        interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-      }
-      
-      const { embed, rows } = buildDashboard(interaction);
-      // PATCH: usa editReply
-      return interaction.editReply({ embeds: [embed], components: rows });
-    }
-    
+
     if (id === 'giveaway_set_duration') {
+      const cfg = ensureConfig(interaction);
       const modal = new ModalBuilder()
         .setCustomId('giveaway_duration_modal')
-        .setTitle('Imposta Durata Default');
-      
+        .setTitle('Imposta Durata Giveaway');
+
       const input = new TextInputBuilder()
-        .setCustomId('giveaway_duration_input')
-        .setLabel('Durata in secondi')
+        .setCustomId('duration_value')
+        .setLabel('Durata (in secondi)')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('86400 (24 ore)')
+        .setPlaceholder('86400 (= 24h)')
+        .setValue(String(cfg.giveawayDuration || 86400))
         .setRequired(true)
-        .setValue(String(ensureConfig(interaction).giveawayDuration || 86400));
-      
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
+        .setMinLength(1)
+        .setMaxLength(7);
+
+      const row = new ActionRowBuilder().addComponents(input);
+      modal.addComponents(row);
       return interaction.showModal(modal);
     }
   } catch (error) {
-    console.error(`[giveaway] Error in handleComponent (${id}):`, error);
-    return interaction.editReply({ content: '❌ Errore durante l\'operazione.', embeds: [], components: [] }).catch(() => {});
+    console.error('[giveaway] Error in handleComponent:', error);
+    return interaction.reply({ content: '❌ Errore nell\'interazione.', ephemeral: true }).catch(() => {});
   }
 }
 
-// Handle modal submits
+// Handle modals
 async function handleModals(interaction) {
   try {
-    if (interaction.customId === 'giveaway_duration_modal') {
+    const id = interaction.customId;
+
+    if (id === 'giveaway_duration_modal') {
       // PATCH: sempre deferUpdate all'inizio
       await interaction.deferUpdate();
-      
-      const duration = parseInt(interaction.fields.getTextInputValue('giveaway_duration_input')) || 86400;
-      const cfg = ensureConfig(interaction);
-      cfg.giveawayDuration = duration;
-      
+      const duration = parseInt(interaction.fields.getTextInputValue('duration_value'), 10);
+
+      if (isNaN(duration) || duration < 60 || duration > 2592000) {
+        return interaction.editReply({ content: '❌ La durata deve essere tra 60 secondi e 2592000 secondi (30 giorni).', embeds: [], components: [] });
+      }
+
       // PATCH: update DB prima
       await db.updateGuildConfig(interaction.guildId, { giveawayDuration: duration });
-      
+
       // PATCH: rebuild config subito prima del dashboard
       const freshCfg = await db.getGuildConfig(interaction.guildId);
       if (freshCfg) {
         interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
       }
-      
+
       const { embed, rows } = buildDashboard(interaction);
       // PATCH: usa editReply
       return interaction.editReply({ embeds: [embed], components: rows });
     }
   } catch (error) {
     console.error('[giveaway] Error in handleModals:', error);
-    return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento della durata.', embeds: [], components: [] }).catch(() => {});
+    return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento.', embeds: [], components: [] }).catch(() => {});
   }
 }
 
@@ -252,5 +223,10 @@ module.exports = {
       console.error('[giveaway] Error in onModal:', error);
       return interaction.reply({ content: '❌ Errore nella gestione del modal.', ephemeral: true }).catch(() => {});
     }
+  },
+
+  // Alias for compatibility with setbot.js
+  async showPanel(interaction, config) {
+    return this.handleGiveaway(interaction);
   }
 };
