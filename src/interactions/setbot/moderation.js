@@ -77,16 +77,13 @@ async function handleSelect(interaction, action) {
     const cfg = ensureConfig(interaction);
     const newVal = !cfg.moderationEnabled;
     cfg.moderationEnabled = newVal;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { moderationEnabled: newVal });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -98,16 +95,13 @@ async function handleSelect(interaction, action) {
     const cfg = ensureConfig(interaction);
     const newVal = !cfg.moderationAutomodEnabled;
     cfg.moderationAutomodEnabled = newVal;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { moderationAutomodEnabled: newVal });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -132,16 +126,13 @@ async function handleComponent(interaction) {
     const cfg = ensureConfig(interaction);
     const channelId = interaction.values?.[0];
     cfg.moderationLogChannelId = channelId;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { moderationLogChannelId: channelId });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -149,6 +140,8 @@ async function handleComponent(interaction) {
 }
 
 module.exports = {
+  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
+
   // Entrypoint to render dashboard
   async handleModeration(interaction) {
     const { embed, rows } = buildDashboard(interaction);
