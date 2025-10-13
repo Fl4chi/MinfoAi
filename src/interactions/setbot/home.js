@@ -5,7 +5,6 @@ module.exports = {
         name: 'setbot',
         description: '🏠 Dashboard principale del bot - Gestisci tutte le funzionalità'
     },
-
     async execute(interaction) {
         try {
             // Crea l'embed principale con lo stile Discord Ticket
@@ -31,6 +30,11 @@ module.exports = {
                     {
                         name: '🛡️ Moderazione',
                         value: 'Sistema completo di moderazione con log avanzati, automod, warning e gestione sanzioni automatizzate.',
+                        inline: true
+                    },
+                    {
+                        name: '✅ Verifica',
+                        value: 'Sistema di verifica utenti con captcha, pulsanti di verifica e assegnazione automatica dei ruoli verificati.',
                         inline: true
                     },
                     {
@@ -76,6 +80,12 @@ module.exports = {
                                 description: 'Configura le regole di moderazione',
                                 value: 'moderation',
                                 emoji: '🛡️'
+                            },
+                            {
+                                label: 'Sistema Verifica',
+                                description: 'Configura il sistema di verifica utenti',
+                                value: 'verification',
+                                emoji: '✅'
                             },
                             {
                                 label: 'Dashboard Giveaway',
@@ -131,7 +141,6 @@ module.exports = {
                     ephemeral: true
                 });
             }
-
         } catch (error) {
             console.error('Errore in home.js:', error);
             const errorMessage = {
