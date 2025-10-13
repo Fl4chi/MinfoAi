@@ -72,19 +72,15 @@ async function handleSelect(interaction, channelId) {
   // PATCH: sempre deferUpdate all'inizio
   await interaction.deferUpdate();
   const cfg = ensureConfig(interaction);
-
   const newId = channelId === 'none' ? null : channelId;
   cfg.musicVoiceChannelId = newId;
-
   // PATCH: update DB prima
   await db.updateGuildConfig(interaction.guildId, { musicVoiceChannelId: newId });
-
   // PATCH: rebuild config subito prima del dashboard
   const freshCfg = await db.getGuildConfig(interaction.guildId);
   if (freshCfg) {
     interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
   }
-
   const { embed, rows } = buildDashboard(interaction);
   // PATCH: usa editReply
   return interaction.editReply({ embeds: [embed], components: rows });
@@ -100,16 +96,13 @@ async function handleComponent(interaction) {
     await interaction.deferUpdate();
     const newVal = !cfg.musicEnabled;
     cfg.musicEnabled = newVal;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { musicEnabled: newVal });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -119,7 +112,6 @@ async function handleComponent(interaction) {
     const modal = new ModalBuilder()
       .setCustomId('music_volume_modal')
       .setTitle('Imposta Volume Musica');
-
     const input = new TextInputBuilder()
       .setCustomId('volume_value')
       .setLabel('Volume (1-100%)')
@@ -129,7 +121,6 @@ async function handleComponent(interaction) {
       .setRequired(true)
       .setMinLength(1)
       .setMaxLength(3);
-
     const row = new ActionRowBuilder().addComponents(input);
     modal.addComponents(row);
     return interaction.showModal(modal);
@@ -148,16 +139,13 @@ async function handleModals(interaction) {
       return interaction.editReply({ content: 'Il volume deve essere tra 1 e 100%.', components: [], embeds: [] });
     }
     cfg.musicVolume = volume;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { musicVolume: volume });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -165,6 +153,8 @@ async function handleModals(interaction) {
 }
 
 module.exports = {
+  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
+
   // Entrypoint to render dashboard
   async handleMusic(interaction) {
     const { embed, rows } = buildDashboard(interaction);
