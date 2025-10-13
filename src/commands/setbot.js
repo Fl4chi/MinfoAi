@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const db = require('../database/db');
+const homeHandler = require('../interactions/setbot/home');
 const welcomeHandler = require('../interactions/setbot/welcome');
 const goodbyeHandler = require('../interactions/setbot/goodbye');
 const musicHandler = require('../interactions/setbot/music');
@@ -15,10 +16,8 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   
   async execute(interaction) {
-    const config = await db.getGuildConfig(interaction.guild.id) || {};
-    // Use showPanel if available, otherwise fall back to handleWelcome
-    const fn = welcomeHandler.showPanel || welcomeHandler.handleWelcome;
-    await fn.call(welcomeHandler, interaction, config);
+    // Mostra subito la dashboard home con la selezione dei moduli
+    await homeHandler.execute(interaction);
   },
   
   async onCategorySelect(interaction) {
