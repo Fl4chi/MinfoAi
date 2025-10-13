@@ -2,7 +2,17 @@
 // Features: color select, image URL, footer, title, live preview (Discord classic embed)
 // Flow: onComponent/onModal -> update DB -> refresh config -> rebuild dashboard -> editReply
 const db = require('../../database/db');
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ChannelType,
+} = require('discord.js');
 
 // Utilities
 function getTextChannels(interaction) {
@@ -60,6 +70,7 @@ function ensureConfig(interaction) {
   }
 }
 
+// Build dashboard UI (helper used by multiple handlers)
 function buildDashboard(interaction) {
   const cfg = ensureConfig(interaction);
   const embed = new EmbedBuilder()
@@ -68,62 +79,77 @@ function buildDashboard(interaction) {
     .setColor(cfg.welcomeEmbed.color)
     .setFooter({ text: cfg.welcomeEmbed.footer });
   if (cfg.welcomeEmbed.image) embed.setImage(cfg.welcomeEmbed.image);
-  const channelOptions = getTextChannels(interaction);
-  const selectRow = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('welcome_channel_select')
-      .setPlaceholder('Seleziona canale di benvenuto')
-      .addOptions(channelOptions)
-  );
-  const buttonsRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('welcome_toggle').setStyle(ButtonStyle.Secondary).setLabel(cfg.welcomeEnabled ? 'Disattiva' : 'Attiva'),
-    new ButtonBuilder().setCustomId('welcome_edit_title').setStyle(ButtonStyle.Primary).setLabel('Titolo'),
-    new ButtonBuilder().setCustomId('welcome_edit_desc').setStyle(ButtonStyle.Primary).setLabel('Descrizione'),
-    new ButtonBuilder().setCustomId('welcome_edit_color').setStyle(ButtonStyle.Secondary).setLabel('Colore'),
-    new ButtonBuilder().setCustomId('welcome_edit_image').setStyle(ButtonStyle.Secondary).setLabel('Immagine')
-  );
-  return { embed, rows: [selectRow, buttonsRow] };
+
+  const channels = getTextChannels(interaction);
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('welcome_channel_select')
+        .setPlaceholder('Seleziona canale di benvenuto')
+        .addOptions(channels),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('welcome_toggle_embed').setLabel('Toggle Embed').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('welcome_edit_text').setLabel('Modifica Testo').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('welcome_edit_color').setLabel('Colore').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('welcome_edit_image').setLabel('Immagine').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('welcome_edit_footer').setLabel('Footer').setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+
+  return { embed, rows };
 }
 
 async function handleSelect(interaction, value) {
-  const guildId = interaction.guildId;
-  await db.updateGuildConfig(guildId, { welcomeChannelId: value });
+  // Persist channel selection then refresh dashboard
+  const cfg = ensureConfig(interaction);
+  db.setGuildConfig(cfg.guildId, { ...cfg, welcomeChannelId: value });
   const { embed, rows } = buildDashboard(interaction);
   return interaction.editReply({ embeds: [embed], components: rows });
 }
 
 async function handleComponent(interaction) {
   const id = interaction.customId;
-  const guildId = interaction.guildId;
-  if (id === 'welcome_toggle') {
+  // For edits we keep ephemeral dashboard response and update with editReply
+  if (id === 'welcome_toggle_embed') {
     const cfg = ensureConfig(interaction);
-    await db.updateGuildConfig(guildId, { welcomeEnabled: !cfg.welcomeEnabled });
+    db.setGuildConfig(cfg.guildId, {
+      ...cfg,
+      welcomeEmbed: { ...cfg.welcomeEmbed, enabled: !cfg.welcomeEmbed.enabled },
+    });
+  } else if (id?.startsWith('welcome_edit_')) {
+    // Build and show a modal for text inputs
+    const field = id.replace('welcome_edit_', '');
+    const modal = new ModalBuilder().setCustomId(`welcome_modal_${field}`).setTitle('Modifica Benvenuto');
+    const input = new TextInputBuilder()
+      .setCustomId('value')
+      .setLabel(`Nuovo valore per ${field}`)
+      .setRequired(true)
+      .setStyle(TextInputStyle.Paragraph);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    // showModal ACKs the interaction, but since we already deferred, it's fine to follow up via modal submit
+    return interaction.showModal(modal);
   }
-  if (id === 'welcome_edit_title') return showModal(interaction, 'welcome_title_modal', 'Titolo', 'Nuovo titolo');
-  if (id === 'welcome_edit_desc') return showModal(interaction, 'welcome_desc_modal', 'Descrizione', 'Nuova descrizione');
-  if (id === 'welcome_edit_color') return showModal(interaction, 'welcome_color_modal', 'Colore HEX', '#5865F2');
-  if (id === 'welcome_edit_image') return showModal(interaction, 'welcome_image_modal', 'URL immagine', 'https://...');
+
   const { embed, rows } = buildDashboard(interaction);
   return interaction.editReply({ embeds: [embed], components: rows });
 }
 
-function showModal(interaction, customId, label, placeholder) {
-  const modal = new ModalBuilder().setCustomId(customId).setTitle('Modifica messaggio di benvenuto');
-  const input = new TextInputBuilder().setCustomId('input').setLabel(label).setStyle(TextInputStyle.Short).setPlaceholder(placeholder).setRequired(true);
-  const row = new ActionRowBuilder().addComponents(input);
-  modal.addComponents(row);
-  return interaction.showModal(modal);
-}
-
 async function handleModals(interaction) {
   try {
-    const id = interaction.customId;
-    const v = interaction.fields.getTextInputValue('input');
-    const guildId = interaction.guildId;
-    if (id === 'welcome_title_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), title: v } });
-    else if (id === 'welcome_desc_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), description: v } });
-    else if (id === 'welcome_color_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), color: v } });
-    else if (id === 'welcome_image_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), image: v } });
+    const id = interaction.customId; // welcome_modal_<field>
+    const field = id?.split('welcome_modal_')[1];
+    const value = interaction.fields.getTextInputValue('value');
+
+    const cfg = ensureConfig(interaction);
+    const next = { ...cfg };
+    if (['title', 'description', 'color', 'image', 'footer'].includes(field)) {
+      next.welcomeEmbed = { ...cfg.welcomeEmbed, [field]: value };
+    } else if (field === 'text' || field === 'message') {
+      next.welcomeMessage = value;
+    }
+    db.setGuildConfig(cfg.guildId, next);
+
     const { embed, rows } = buildDashboard(interaction);
     return interaction.editReply({ embeds: [embed], components: rows });
   } catch (error) {
@@ -135,19 +161,38 @@ async function handleModals(interaction) {
 }
 
 module.exports = {
-  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
+  // Entry used by slash or router
+  async execute(interaction) {
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
+      if (typeof this.showPanel === 'function') return this.showPanel(interaction);
+      if (typeof this.handleVerification === 'function') return this.handleVerification(interaction);
+      return interaction.editReply({ content: '❌ Dashboard modulo non implementata correttamente!' });
+    } catch (error) {
+      console.error('[welcome] Error in execute:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: '❌ Errore nell\'esecuzione.', ephemeral: true }).catch(() => {});
+      }
+      return interaction.editReply({ content: '❌ Errore nell\'esecuzione.' }).catch(() => {});
+    }
+  },
 
   // Legacy main (kept for compatibility)
   async handleWelcome(interaction) {
     try {
-      const { embed, rows } = buildDashboard(interaction);
-      if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ embeds: [embed], components: rows });
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
       }
-      return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+      const { embed, rows } = buildDashboard(interaction);
+      return interaction.editReply({ embeds: [embed], components: rows });
     } catch (error) {
       console.error('[welcome] Error in handleWelcome:', error);
-      return interaction.reply({ content: '❌ Errore nel caricamento della dashboard.', ephemeral: true }).catch(() => {});
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: '❌ Errore nel caricamento della dashboard.', ephemeral: true }).catch(() => {});
+      }
+      return interaction.editReply({ content: '❌ Errore nel caricamento della dashboard.' }).catch(() => {});
     }
   },
 
@@ -159,28 +204,40 @@ module.exports = {
   // Router for selects/buttons
   async onComponent(interaction) {
     try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
       const id = interaction.customId;
       if (id === 'welcome_channel_select') {
         const v = interaction.values?.[0];
         if (v === undefined) {
-          return interaction.reply({ content: '❌ Nessun canale selezionato.', ephemeral: true }).catch(() => {});
+          return interaction.editReply({ content: '❌ Nessun canale selezionato.' }).catch(() => {});
         }
         return handleSelect(interaction, v);
       }
       return handleComponent(interaction);
     } catch (error) {
       console.error('[welcome] Error in onComponent:', error);
-      return interaction.reply({ content: "❌ Errore nell'interazione.", ephemeral: true }).catch(() => {});
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: '❌ Errore nell\'interazione.', ephemeral: true }).catch(() => {});
+      }
+      return interaction.editReply({ content: '❌ Errore nell\'interazione.' }).catch(() => {});
     }
   },
 
   // Router for modals
   async onModal(interaction) {
     try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
       return handleModals(interaction);
     } catch (error) {
       console.error('[welcome] Error in onModal:', error);
-      return interaction.reply({ content: '❌ Errore nella gestione del modal.', ephemeral: true }).catch(() => {});
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: '❌ Errore nella gestione del modal.', ephemeral: true }).catch(() => {});
+      }
+      return interaction.editReply({ content: '❌ Errore nella gestione del modal.' }).catch(() => {});
     }
   },
 };
