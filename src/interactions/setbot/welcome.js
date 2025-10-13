@@ -37,7 +37,6 @@ function ensureConfig(interaction) {
         },
       };
     }
-
     const guildId = interaction.guildId;
     const cfg = db.getGuildConfig(guildId) || {};
     const merged = {
@@ -54,7 +53,6 @@ function ensureConfig(interaction) {
         footer: cfg.welcomeEmbed?.footer ?? 'Arrivato oggi',
       },
     };
-
     return merged;
   } catch (e) {
     console.error('[welcome] ensureConfig error:', e);
@@ -70,16 +68,13 @@ function buildDashboard(interaction) {
     .setColor(cfg.welcomeEmbed.color)
     .setFooter({ text: cfg.welcomeEmbed.footer });
   if (cfg.welcomeEmbed.image) embed.setImage(cfg.welcomeEmbed.image);
-
   const channelOptions = getTextChannels(interaction);
-
   const selectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('welcome_channel_select')
       .setPlaceholder('Seleziona canale di benvenuto')
       .addOptions(channelOptions)
   );
-
   const buttonsRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('welcome_toggle').setStyle(ButtonStyle.Secondary).setLabel(cfg.welcomeEnabled ? 'Disattiva' : 'Attiva'),
     new ButtonBuilder().setCustomId('welcome_edit_title').setStyle(ButtonStyle.Primary).setLabel('Titolo'),
@@ -87,7 +82,6 @@ function buildDashboard(interaction) {
     new ButtonBuilder().setCustomId('welcome_edit_color').setStyle(ButtonStyle.Secondary).setLabel('Colore'),
     new ButtonBuilder().setCustomId('welcome_edit_image').setStyle(ButtonStyle.Secondary).setLabel('Immagine')
   );
-
   return { embed, rows: [selectRow, buttonsRow] };
 }
 
@@ -101,17 +95,14 @@ async function handleSelect(interaction, value) {
 async function handleComponent(interaction) {
   const id = interaction.customId;
   const guildId = interaction.guildId;
-
   if (id === 'welcome_toggle') {
     const cfg = ensureConfig(interaction);
     await db.updateGuildConfig(guildId, { welcomeEnabled: !cfg.welcomeEnabled });
   }
-
   if (id === 'welcome_edit_title') return showModal(interaction, 'welcome_title_modal', 'Titolo', 'Nuovo titolo');
   if (id === 'welcome_edit_desc') return showModal(interaction, 'welcome_desc_modal', 'Descrizione', 'Nuova descrizione');
   if (id === 'welcome_edit_color') return showModal(interaction, 'welcome_color_modal', 'Colore HEX', '#5865F2');
   if (id === 'welcome_edit_image') return showModal(interaction, 'welcome_image_modal', 'URL immagine', 'https://...');
-
   const { embed, rows } = buildDashboard(interaction);
   return interaction.editReply({ embeds: [embed], components: rows });
 }
@@ -129,12 +120,10 @@ async function handleModals(interaction) {
     const id = interaction.customId;
     const v = interaction.fields.getTextInputValue('input');
     const guildId = interaction.guildId;
-
     if (id === 'welcome_title_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), title: v } });
     else if (id === 'welcome_desc_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), description: v } });
     else if (id === 'welcome_color_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), color: v } });
     else if (id === 'welcome_image_modal') await db.updateGuildConfig(guildId, { welcomeEmbed: { ...(ensureConfig(interaction).welcomeEmbed), image: v } });
-
     const { embed, rows } = buildDashboard(interaction);
     return interaction.editReply({ embeds: [embed], components: rows });
   } catch (error) {
@@ -146,23 +135,7 @@ async function handleModals(interaction) {
 }
 
 module.exports = {
-  // NEW entrypoint required by home.js and dynamic routing
-  async execute(interaction) {
-    // Backward compatibility: map legacy handlers
-    const self = module.exports;
-    self.showPanel = self.showPanel || self.handleWelcome;
-
-    try {
-      const { embed, rows } = buildDashboard(interaction);
-      if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ embeds: [embed], components: rows });
-      }
-      return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
-    } catch (error) {
-      console.error('[welcome] Error in execute:', error);
-      return interaction.reply({ content: '❌ Errore nel caricamento della dashboard.', ephemeral: true }).catch(() => {});
-    }
-  },
+  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
 
   // Legacy main (kept for compatibility)
   async handleWelcome(interaction) {
