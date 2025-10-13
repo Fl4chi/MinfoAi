@@ -1,14 +1,21 @@
-// Patch: questa dashboard aggiorna in real-time dopo ogni interazione. Sequenza: deferUpdate -> update DB -> rebuild config -> buildDashboard -> editReply
-// Refactored: 2025-10-12 - Dashboard goodbye con aggiornamento live immediato
+// Dashboard Goodbye Embed Customization — ensure every interaction is acknowledged and errors handled robustly
 const db = require('../../database/db');
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  ButtonBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ChannelType,
+} = require('discord.js');
 
-// Helper: get channels
 function getTextChannels(interaction) {
   try {
     return interaction.guild.channels.cache
-      .filter(c => c.type === ChannelType.GuildText)
-      .map(c => ({ label: `#${c.name}`, value: c.id }))
+      .filter((c) => c.type === ChannelType.GuildText)
+      .map((c) => ({ label: `#${c.name}`, value: c.id }))
       .slice(0, 24);
   } catch (error) {
     console.error('[goodbye] Error fetching channels:', error);
@@ -16,34 +23,32 @@ function getTextChannels(interaction) {
   }
 }
 
-// Helper: ensure config
 function ensureConfig(interaction) {
-  let cfg = interaction.client.guildConfigs.get(interaction.guildId);
+  let cfg = interaction.client.guildConfigs?.get(interaction.guildId);
   if (!cfg) {
     cfg = {
       guildId: interaction.guildId,
       goodbyeEnabled: false,
       goodbyeChannelId: null,
-      goodbyeMessage: 'Addio {user}!'
+      goodbyeMessage: 'Addio {user}!',
     };
-    interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    interaction.client.guildConfigs?.set?.(interaction.guildId, cfg);
   }
   if (cfg.goodbyeMessage === undefined) cfg.goodbyeMessage = 'Addio {user}!';
   return cfg;
 }
 
-// Build dashboard embed + components
 function buildDashboard(interaction) {
   const cfg = ensureConfig(interaction);
   const chOptions = getTextChannels(interaction);
   const embed = new EmbedBuilder()
     .setTitle('⚙️ Dashboard Goodbye')
-    .setColor(cfg.goodbyeEnabled ? 0x00FF00 : 0xFF0000)
+    .setColor(cfg.goodbyeEnabled ? 0x00ff00 : 0xff0000)
     .setDescription(
       `**Status:** ${cfg.goodbyeEnabled ? '✅ Attivo' : '❌ Disattivo'}\n` +
-      `**Canale:** ${cfg.goodbyeChannelId ? `<#${cfg.goodbyeChannelId}>` : 'Nessuno'}\n` +
-      `**Messaggio:**\n\`\`\`${cfg.goodbyeMessage || 'Nessuno'}\`\`\`\n` +
-      `*Variabili disponibili:* \`{user}\`, \`{server}\`, \`{memberCount}\``
+        `**Canale:** ${cfg.goodbyeChannelId ? `<#${cfg.goodbyeChannelId}>` : 'Nessuno'}\n` +
+        `**Messaggio:**\n\`\`\`${cfg.goodbyeMessage || 'Nessuno'}\`\`\`\n` +
+        `*Variabili disponibili:* \`{user}\`, \`{server}\`, \`{memberCount}\``
     );
   const toggleBtn = new ButtonBuilder()
     .setCustomId('goodbye_toggle')
@@ -54,8 +59,7 @@ function buildDashboard(interaction) {
     .setLabel('Modifica Messaggio')
     .setStyle(1)
     .setEmoji('✏️');
-  const row1 = new ActionRowBuilder().addComponents(toggleBtn, editMsgBtn);
-  const rows = [row1];
+  const rows = [new ActionRowBuilder().addComponents(toggleBtn, editMsgBtn)];
   if (chOptions.length > 0) {
     const channelMenu = new StringSelectMenuBuilder()
       .setCustomId('goodbye_channel_select')
@@ -66,47 +70,36 @@ function buildDashboard(interaction) {
   return { embed, rows };
 }
 
-// Handle select menu
+async function persistAndRefresh(interaction, partialUpdate) {
+  // Update DB then refresh cache and dashboard
+  await db.updateGuildConfig(interaction.guildId, partialUpdate);
+  const freshCfg = await db.getGuildConfig(interaction.guildId);
+  if (freshCfg && interaction.client.guildConfigs?.set) {
+    interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+  }
+  const { embed, rows } = buildDashboard(interaction);
+  return interaction.editReply({ embeds: [embed], components: rows });
+}
+
 async function handleSelect(interaction, channelId) {
   try {
-    await interaction.deferUpdate();
-    // PATCH: update DB
-    await db.updateGuildConfig(interaction.guildId, { goodbyeChannelId: channelId });
-    // PATCH: rebuild config subito prima del dashboard
-    const freshCfg = await db.getGuildConfig(interaction.guildId);
-    if (freshCfg) {
-      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-    }
-    const { embed, rows } = buildDashboard(interaction);
-    return interaction.editReply({ embeds: [embed], components: rows });
+    return persistAndRefresh(interaction, { goodbyeChannelId: channelId });
   } catch (error) {
     console.error('[goodbye] Error in handleSelect:', error);
-    return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento.', embeds: [], components: [] }).catch(() => {});
+    return interaction.editReply({ content: "❌ Errore durante l'aggiornamento.", embeds: [], components: [] }).catch(() => {});
   }
 }
 
-// Handle buttons
 async function handleComponent(interaction) {
   try {
     const id = interaction.customId;
     if (id === 'goodbye_toggle') {
-      await interaction.deferUpdate();
       const cfg = ensureConfig(interaction);
       const newVal = !cfg.goodbyeEnabled;
-      // PATCH: update DB
-      await db.updateGuildConfig(interaction.guildId, { goodbyeEnabled: newVal });
-      // PATCH: rebuild config subito prima del dashboard
-      const freshCfg = await db.getGuildConfig(interaction.guildId);
-      if (freshCfg) {
-        interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-      }
-      const { embed, rows } = buildDashboard(interaction);
-      return interaction.editReply({ embeds: [embed], components: rows });
+      return persistAndRefresh(interaction, { goodbyeEnabled: newVal });
     }
     if (id === 'goodbye_edit_message') {
-      const modal = new ModalBuilder()
-        .setCustomId('goodbye_message_modal')
-        .setTitle('Modifica Messaggio Goodbye');
+      const modal = new ModalBuilder().setCustomId('goodbye_message_modal').setTitle('Modifica Messaggio Goodbye');
       const msgInput = new TextInputBuilder()
         .setCustomId('goodbye_msg_input')
         .setLabel('Messaggio')
@@ -120,80 +113,86 @@ async function handleComponent(interaction) {
     }
   } catch (error) {
     console.error('[goodbye] Error in handleComponent:', error);
-    return interaction.reply({ content: '❌ Errore nell\'interazione.', ephemeral: true }).catch(() => {});
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: "❌ Errore nell'interazione.", ephemeral: true }).catch(() => {});
+    }
+    return interaction.editReply({ content: "❌ Errore nell'interazione." }).catch(() => {});
   }
 }
 
-// Handle modals
 async function handleModals(interaction) {
   try {
     const id = interaction.customId;
     if (id === 'goodbye_message_modal') {
-      await interaction.deferUpdate();
       const msg = interaction.fields.getTextInputValue('goodbye_msg_input');
-      // PATCH: update DB prima
-      await db.updateGuildConfig(interaction.guildId, { goodbyeMessage: msg });
-      
-      // PATCH: rebuild config subito prima del dashboard
-      const freshCfg = await db.getGuildConfig(interaction.guildId);
-      if (freshCfg) {
-        interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-      }
-      
-      const { embed, rows } = buildDashboard(interaction);
-      // PATCH: usa editReply
-      return interaction.editReply({ embeds: [embed], components: rows });
+      return persistAndRefresh(interaction, { goodbyeMessage: msg });
     }
   } catch (error) {
     console.error('[goodbye] Error in handleModals:', error);
-    return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento del messaggio.', embeds: [], components: [] }).catch(() => {});
+    return interaction.editReply({ content: "❌ Errore durante l'aggiornamento del messaggio.", embeds: [], components: [] }).catch(() => {});
   }
 }
 
 module.exports = {
-  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
-
-  // Entrypoint legacy to render dashboard
-  async handleGoodbye(interaction) {
+  async execute(interaction) {
     try {
-      const { embed, rows } = buildDashboard(interaction);
-      if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ embeds: [embed], components: rows });
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
       }
-      return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+      const { embed, rows } = buildDashboard(interaction);
+      return interaction.editReply({ embeds: [embed], components: rows });
     } catch (error) {
-      console.error('[goodbye] Error in handleGoodbye:', error);
-      return interaction.reply({ content: '❌ Errore nel caricamento della dashboard.', ephemeral: true }).catch(() => {});
+      console.error('[goodbye] Error in execute:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: "❌ Errore nell'esecuzione.", ephemeral: true }).catch(() => {});
+      }
+      return interaction.editReply({ content: "❌ Errore nell'esecuzione." }).catch(() => {});
     }
   },
-  
-  // Router for selects/buttons
+
+  async handleGoodbye(interaction) {
+    return this.execute(interaction);
+  },
+
   async onComponent(interaction) {
     try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
       const id = interaction.customId;
       if (id === 'goodbye_channel_select') {
         const v = interaction.values?.[0];
+        if (v === undefined) {
+          return interaction.editReply({ content: '❌ Nessun canale selezionato.' }).catch(() => {});
+        }
         return handleSelect(interaction, v);
       }
       return handleComponent(interaction);
     } catch (error) {
       console.error('[goodbye] Error in onComponent:', error);
-      return interaction.reply({ content: '❌ Errore nell\'interazione.', ephemeral: true }).catch(() => {});
-    }
-  },
-  
-  // Router for modals
-  async onModal(interaction) {
-    try {
-      return handleModals(interaction);
-    } catch (error) {
-      console.error('[goodbye] Error in onModal:', error);
-      return interaction.reply({ content: '❌ Errore nella gestione del modal.', ephemeral: true }).catch(() => {});
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: "❌ Errore nell'interazione.", ephemeral: true }).catch(() => {});
+      }
+      return interaction.editReply({ content: "❌ Errore nell'interazione." }).catch(() => {});
     }
   },
 
-  // Alias for compatibility with setbot.js
+  async onModal(interaction) {
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
+      return handleModals(interaction);
+    } catch (error) {
+      console.error('[goodbye] Error in onModal:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: '❌ Errore nella gestione del modal.', ephemeral: true }).catch(() => {});
+      }
+      return interaction.editReply({ content: '❌ Errore nella gestione del modal.' }).catch(() => {});
+    }
+  },
+
   async showPanel(interaction, config) {
-    return this.handleGoodbye(interaction);
-  }
+    return this.execute(interaction);
+  },
 };
