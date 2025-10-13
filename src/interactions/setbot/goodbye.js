@@ -4,7 +4,6 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder,
-  ButtonBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -34,13 +33,17 @@ function ensureConfig(interaction) {
     };
     interaction.client.guildConfigs?.set?.(interaction.guildId, cfg);
   }
-  if (cfg.goodbyeMessage === undefined) cfg.goodbyeMessage = 'Addio {user}!';
+  // Initialize all properties with defaults to avoid undefined
+  cfg.goodbyeEnabled = cfg.goodbyeEnabled ?? false;
+  cfg.goodbyeChannelId = cfg.goodbyeChannelId ?? null;
+  cfg.goodbyeMessage = cfg.goodbyeMessage ?? 'Addio {user}!';
   return cfg;
 }
 
 function buildDashboard(interaction) {
   const cfg = ensureConfig(interaction);
   const chOptions = getTextChannels(interaction);
+  
   const embed = new EmbedBuilder()
     .setTitle('⚙️ Dashboard Goodbye')
     .setColor(cfg.goodbyeEnabled ? 0x00ff00 : 0xff0000)
@@ -49,17 +52,13 @@ function buildDashboard(interaction) {
         `**Canale:** ${cfg.goodbyeChannelId ? `<#${cfg.goodbyeChannelId}>` : 'Nessuno'}\n` +
         `**Messaggio:**\n\`\`\`${cfg.goodbyeMessage || 'Nessuno'}\`\`\`\n` +
         `*Variabili disponibili:* \`{user}\`, \`{server}\`, \`{memberCount}\``
-    );
-  const toggleBtn = new ButtonBuilder()
-    .setCustomId('goodbye_toggle')
-    .setLabel(cfg.goodbyeEnabled ? 'Disabilita' : 'Abilita')
-    .setStyle(cfg.goodbyeEnabled ? 4 : 3);
-  const editMsgBtn = new ButtonBuilder()
-    .setCustomId('goodbye_edit_message')
-    .setLabel('Modifica Messaggio')
-    .setStyle(1)
-    .setEmoji('✏️');
-  const rows = [new ActionRowBuilder().addComponents(toggleBtn, editMsgBtn)];
+    )
+    .setTimestamp()
+    .setFooter({ text: 'Dashboard aggiornata' });
+
+  const rows = [];
+  
+  // Only add channel select menu if channels are available
   if (chOptions.length > 0) {
     const channelMenu = new StringSelectMenuBuilder()
       .setCustomId('goodbye_channel_select')
@@ -67,18 +66,39 @@ function buildDashboard(interaction) {
       .addOptions(chOptions);
     rows.push(new ActionRowBuilder().addComponents(channelMenu));
   }
+  
   return { embed, rows };
 }
 
 async function persistAndRefresh(interaction, partialUpdate) {
-  // Update DB then refresh cache and dashboard
-  await db.updateGuildConfig(interaction.guildId, partialUpdate);
-  const freshCfg = await db.getGuildConfig(interaction.guildId);
-  if (freshCfg && interaction.client.guildConfigs?.set) {
-    interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+  try {
+    // Update DB
+    await db.updateGuildConfig(interaction.guildId, partialUpdate);
+    
+    // Refresh cache
+    const freshCfg = await db.getGuildConfig(interaction.guildId);
+    if (freshCfg && interaction.client.guildConfigs?.set) {
+      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+    }
+    
+    // Build and send updated dashboard
+    const { embed, rows } = buildDashboard(interaction);
+    
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+    } else {
+      return interaction.editReply({ embeds: [embed], components: rows });
+    }
+  } catch (error) {
+    console.error('[goodbye] Error in persistAndRefresh:', error);
+    const errorMsg = { content: "❌ Errore durante l'aggiornamento.", embeds: [], components: [] };
+    
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ ...errorMsg, ephemeral: true }).catch(() => {});
+    } else {
+      return interaction.editReply(errorMsg).catch(() => {});
+    }
   }
-  const { embed, rows } = buildDashboard(interaction);
-  return interaction.editReply({ embeds: [embed], components: rows });
 }
 
 async function handleSelect(interaction, channelId) {
@@ -87,36 +107,6 @@ async function handleSelect(interaction, channelId) {
   } catch (error) {
     console.error('[goodbye] Error in handleSelect:', error);
     return interaction.editReply({ content: "❌ Errore durante l'aggiornamento.", embeds: [], components: [] }).catch(() => {});
-  }
-}
-
-async function handleComponent(interaction) {
-  try {
-    const id = interaction.customId;
-    if (id === 'goodbye_toggle') {
-      const cfg = ensureConfig(interaction);
-      const newVal = !cfg.goodbyeEnabled;
-      return persistAndRefresh(interaction, { goodbyeEnabled: newVal });
-    }
-    if (id === 'goodbye_edit_message') {
-      const modal = new ModalBuilder().setCustomId('goodbye_message_modal').setTitle('Modifica Messaggio Goodbye');
-      const msgInput = new TextInputBuilder()
-        .setCustomId('goodbye_msg_input')
-        .setLabel('Messaggio')
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('Es: Addio {user}! Arrivederci.')
-        .setValue(ensureConfig(interaction).goodbyeMessage || '')
-        .setRequired(true)
-        .setMaxLength(500);
-      modal.addComponents(new ActionRowBuilder().addComponents(msgInput));
-      return interaction.showModal(modal);
-    }
-  } catch (error) {
-    console.error('[goodbye] Error in handleComponent:', error);
-    if (!interaction.replied && !interaction.deferred) {
-      return interaction.reply({ content: "❌ Errore nell'interazione.", ephemeral: true }).catch(() => {});
-    }
-    return interaction.editReply({ content: "❌ Errore nell'interazione." }).catch(() => {});
   }
 }
 
@@ -157,9 +147,12 @@ module.exports = {
   async onComponent(interaction) {
     try {
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferUpdate();
       }
+      
       const id = interaction.customId;
+      
+      // Handle channel selection
       if (id === 'goodbye_channel_select') {
         const v = interaction.values?.[0];
         if (v === undefined) {
@@ -167,7 +160,6 @@ module.exports = {
         }
         return handleSelect(interaction, v);
       }
-      return handleComponent(interaction);
     } catch (error) {
       console.error('[goodbye] Error in onComponent:', error);
       if (!interaction.replied && !interaction.deferred) {
