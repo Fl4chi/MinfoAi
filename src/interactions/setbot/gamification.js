@@ -83,19 +83,15 @@ async function handleSelect(interaction, channelId) {
   // PATCH: sempre deferUpdate all'inizio
   await interaction.deferUpdate();
   const cfg = ensureConfig(interaction);
-
   const newId = channelId === 'none' ? null : channelId;
   cfg.gamificationLevelChannelId = newId;
-
   // PATCH: update DB prima
   await db.updateGuildConfig(interaction.guildId, { gamificationLevelChannelId: newId });
-
   // PATCH: rebuild config subito prima del dashboard
   const freshCfg = await db.getGuildConfig(interaction.guildId);
   if (freshCfg) {
     interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
   }
-
   const { embed, rows } = buildDashboard(interaction);
   // PATCH: usa editReply
   return interaction.editReply({ embeds: [embed], components: rows });
@@ -111,16 +107,13 @@ async function handleComponent(interaction) {
     await interaction.deferUpdate();
     const newVal = !cfg.gamificationEnabled;
     cfg.gamificationEnabled = newVal;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { gamificationEnabled: newVal });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -130,7 +123,6 @@ async function handleComponent(interaction) {
     const modal = new ModalBuilder()
       .setCustomId('gamification_xp_modal')
       .setTitle('Imposta XP per Messaggio');
-
     const input = new TextInputBuilder()
       .setCustomId('xp_value')
       .setLabel('XP per messaggio')
@@ -140,7 +132,6 @@ async function handleComponent(interaction) {
       .setRequired(true)
       .setMinLength(1)
       .setMaxLength(3);
-
     const row = new ActionRowBuilder().addComponents(input);
     modal.addComponents(row);
     return interaction.showModal(modal);
@@ -150,7 +141,6 @@ async function handleComponent(interaction) {
     const modal = new ModalBuilder()
       .setCustomId('gamification_cooldown_modal')
       .setTitle('Imposta Cooldown XP');
-
     const input = new TextInputBuilder()
       .setCustomId('cooldown_value')
       .setLabel('Cooldown (secondi)')
@@ -160,7 +150,6 @@ async function handleComponent(interaction) {
       .setRequired(true)
       .setMinLength(1)
       .setMaxLength(4);
-
     const row = new ActionRowBuilder().addComponents(input);
     modal.addComponents(row);
     return interaction.showModal(modal);
@@ -179,16 +168,13 @@ async function handleModals(interaction) {
       return interaction.editReply({ content: 'L\'XP deve essere tra 1 e 100.', components: [], embeds: [] });
     }
     cfg.gamificationXpPerMessage = xp;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { gamificationXpPerMessage: xp });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -200,16 +186,13 @@ async function handleModals(interaction) {
       return interaction.editReply({ content: 'Il cooldown deve essere tra 0 e 3600 secondi.', components: [], embeds: [] });
     }
     cfg.gamificationXpCooldown = cooldown;
-
     // PATCH: update DB prima
     await db.updateGuildConfig(interaction.guildId, { gamificationXpCooldown: cooldown });
-
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
-
     const { embed, rows } = buildDashboard(interaction);
     // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
@@ -217,6 +200,8 @@ async function handleModals(interaction) {
 }
 
 module.exports = {
+  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
+
   // Entrypoint to render dashboard
   async handleGamification(interaction) {
     const { embed, rows } = buildDashboard(interaction);
