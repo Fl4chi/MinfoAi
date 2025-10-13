@@ -9,6 +9,63 @@ const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, 
 // - handleModals(interaction)
 // - hasBotPermsInChannel(channel)
 
+/**
+ * Inizializza client.guildConfigs se non esiste
+ * @param {Client} client - Il client Discord
+ */
+function initializeGuildConfigs(client) {
+  if (!client) {
+    throw new Error('Client object is required');
+  }
+  if (!client.guildConfigs) {
+    client.guildConfigs = new Map();
+    console.log('[Verification] Inizializzato client.guildConfigs');
+  }
+}
+
+/**
+ * Ottiene o crea la configurazione per una gilda
+ * @param {Interaction} interaction - L'interazione Discord
+ * @returns {Object} La configurazione della gilda
+ */
+function ensureGuildConfig(interaction) {
+  if (!interaction || !interaction.client || !interaction.guild) {
+    throw new Error('Invalid interaction, client, or guild');
+  }
+
+  const client = interaction.client;
+  const guildId = interaction.guild.id;
+
+  // Inizializza guildConfigs se necessario
+  initializeGuildConfigs(client);
+
+  // Ottieni o crea la configurazione per questa gilda
+  if (!client.guildConfigs.has(guildId)) {
+    client.guildConfigs.set(guildId, {
+      verification: {
+        enabled: false,
+        roleId: null,
+        channelId: null,
+        messageId: null,
+        logChannelId: null,
+        title: '✅ Verifica',
+        description: 'Clicca il pulsante per verificarti e ottenere accesso al server!',
+        buttonText: 'Verifica',
+        color: '#5865F2'
+      },
+      welcome: {},
+      goodbye: {},
+      moderation: {},
+      music: {},
+      gamification: {},
+      giveaway: {}
+    });
+    console.log(`[Verification] Creata nuova configurazione per gilda ${guildId}`);
+  }
+
+  return client.guildConfigs.get(guildId);
+}
+
 module.exports = {
   // Entrypoint to render dashboard
   async handleVerification(interaction) {
@@ -16,6 +73,9 @@ module.exports = {
       if (!interaction) {
         throw new Error('Interaction object is required');
       }
+
+      // Assicurati che la configurazione esista
+      ensureGuildConfig(interaction);
 
       const { embed, rows } = buildDashboard(interaction);
       
@@ -44,6 +104,9 @@ module.exports = {
       if (!interaction || !interaction.customId) {
         throw new Error('Invalid interaction or missing customId');
       }
+
+      // Assicurati che la configurazione esista
+      ensureGuildConfig(interaction);
 
       const id = interaction.customId;
       
@@ -76,6 +139,10 @@ module.exports = {
       if (!interaction) {
         throw new Error('Invalid interaction');
       }
+
+      // Assicurati che la configurazione esista
+      ensureGuildConfig(interaction);
+
       return await handleModals(interaction);
     } catch (error) {
       console.error('Error in onModal:', error);
@@ -101,7 +168,9 @@ module.exports = {
         return;
       }
 
-      const cfg = ensureConfig(interaction);
+      // Assicurati che la configurazione esista
+      const cfg = ensureGuildConfig(interaction);
+
       if (!cfg || !cfg.verification) {
         return await interaction.reply({ 
           content: '❌ Configurazione non trovata.', 
@@ -205,5 +274,9 @@ module.exports = {
   async showPanel(interaction, config) {
     // Usa la funzione principale di rendering con gestione errori
     return await this.handleVerification(interaction);
-  }
+  },
+
+  // Esporta le funzioni di utilità per uso esterno
+  initializeGuildConfigs,
+  ensureGuildConfig
 };
