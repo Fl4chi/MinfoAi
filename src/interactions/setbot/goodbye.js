@@ -2,6 +2,7 @@
 // Refactored: 2025-10-12 - Dashboard goodbye con aggiornamento live immediato
 const db = require('../../database/db');
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+
 // Helper: get channels
 function getTextChannels(interaction) {
   try {
@@ -14,6 +15,7 @@ function getTextChannels(interaction) {
     return [];
   }
 }
+
 // Helper: ensure config
 function ensureConfig(interaction) {
   let cfg = interaction.client.guildConfigs.get(interaction.guildId);
@@ -29,6 +31,7 @@ function ensureConfig(interaction) {
   if (cfg.goodbyeMessage === undefined) cfg.goodbyeMessage = 'Addio {user}!';
   return cfg;
 }
+
 // Build dashboard embed + components
 function buildDashboard(interaction) {
   const cfg = ensureConfig(interaction);
@@ -62,6 +65,7 @@ function buildDashboard(interaction) {
   }
   return { embed, rows };
 }
+
 // Handle select menu
 async function handleSelect(interaction, channelId) {
   try {
@@ -80,6 +84,7 @@ async function handleSelect(interaction, channelId) {
     return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento.', embeds: [], components: [] }).catch(() => {});
   }
 }
+
 // Handle buttons
 async function handleComponent(interaction) {
   try {
@@ -118,6 +123,7 @@ async function handleComponent(interaction) {
     return interaction.reply({ content: '❌ Errore nell\'interazione.', ephemeral: true }).catch(() => {});
   }
 }
+
 // Handle modals
 async function handleModals(interaction) {
   try {
@@ -143,24 +149,9 @@ async function handleModals(interaction) {
     return interaction.editReply({ content: '❌ Errore durante l\'aggiornamento del messaggio.', embeds: [], components: [] }).catch(() => {});
   }
 }
-module.exports = {
-  // NEW entrypoint required by home.js and dynamic routing
-  async execute(interaction) {
-    // Backward compatibility: map legacy handlers
-    const self = module.exports;
-    self.showPanel = self.showPanel || self.handleGoodbye;
 
-    try {
-      const { embed, rows } = buildDashboard(interaction);
-      if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ embeds: [embed], components: rows });
-      }
-      return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
-    } catch (error) {
-      console.error('[goodbye] Error in execute:', error);
-      return interaction.reply({ content: '❌ Errore nel caricamento della dashboard.', ephemeral: true }).catch(() => {});
-    }
-  },
+module.exports = {
+  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
 
   // Entrypoint legacy to render dashboard
   async handleGoodbye(interaction) {
@@ -200,6 +191,7 @@ module.exports = {
       return interaction.reply({ content: '❌ Errore nella gestione del modal.', ephemeral: true }).catch(() => {});
     }
   },
+
   // Alias for compatibility with setbot.js
   async showPanel(interaction, config) {
     return this.handleGoodbye(interaction);
