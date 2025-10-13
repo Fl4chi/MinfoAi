@@ -1,14 +1,14 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
-  
-if (interaction.customId === 'verification_message_modal') {
-    verification.messageTitle = interaction.fields.getTextInputValue('message_title');
-    verification.messageDescription = interaction.fields.getTextInputValue('message_description');
-    verification.buttonLabel = interaction.fields.getTextInputValue('button_label');
-  }
-  interaction.client.guildConfigs.set(interaction.guildId, cfg);
-  const { embed, rows } = buildDashboard(interaction);
-  return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
-}
+
+// Helper functions that need to be imported or defined elsewhere
+// These should be defined in a separate utility file or earlier in this file:
+// - buildDashboard(interaction)
+// - ensureConfig(interaction)
+// - handleSelect(interaction, value)
+// - handleComponent(interaction)
+// - handleModals(interaction)
+// - hasBotPermsInChannel(channel)
+
 module.exports = {
   // Entrypoint to render dashboard
   async handleVerification(interaction) {
