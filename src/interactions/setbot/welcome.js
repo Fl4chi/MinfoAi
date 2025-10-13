@@ -1,5 +1,6 @@
 // Patch: questa dashboard aggiorna in real-time dopo ogni interazione. Sequenza: deferUpdate > update DB > rebuild config > buildDashboard > editReply
 // Refactored: 2025-10-12 - Dashboard welcome con aggiornamento live immediato
+// Fixed: 2025-10-13 - Robust client.guildConfigs initialization and error handling
 const db = require('../../database/db');
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
 
@@ -25,15 +26,27 @@ function getTextChannels(interaction) {
 // Helper: ensure config
 function ensureConfig(interaction) {
   try {
-    // Fix: Add null checks to prevent TypeError get
-    if (!interaction || !interaction.client || !interaction.client.guildConfigs) {
-      console.error('[welcome] Missing client or guildConfigs in interaction');
+    // CRITICAL: Initialize client.guildConfigs if missing to prevent 'Cannot read property set of undefined'
+    if (!interaction || !interaction.client) {
+      console.error('[welcome] Missing client in interaction');
       return {
         guildId: interaction?.guildId || null,
         welcomeEnabled: false,
         welcomeChannelId: null,
         welcomeMessage: '{user}'
       };
+    }
+    
+    // Initialize guildConfigs Map if it doesn't exist (first startup)
+    if (!interaction.client.guildConfigs) {
+      console.log('[welcome] Initializing client.guildConfigs Map (first startup)');
+      interaction.client.guildConfigs = new Map();
+    }
+    
+    // Validate guildConfigs is actually a Map
+    if (!(interaction.client.guildConfigs instanceof Map)) {
+      console.warn('[welcome] guildConfigs is not a Map, reinitializing');
+      interaction.client.guildConfigs = new Map();
     }
     
     let cfg = interaction.client.guildConfigs.get(interaction.guildId);
@@ -46,7 +59,12 @@ function ensureConfig(interaction) {
       };
       interaction.client.guildConfigs.set(interaction.guildId, cfg);
     }
+    
+    // Ensure all required properties exist
     if (cfg.welcomeMessage === undefined) cfg.welcomeMessage = '{user}';
+    if (cfg.welcomeEnabled === undefined) cfg.welcomeEnabled = false;
+    if (cfg.welcomeChannelId === undefined) cfg.welcomeChannelId = null;
+    
     return cfg;
   } catch (error) {
     console.error('[welcome] Error in ensureConfig:', error);
@@ -126,7 +144,7 @@ async function handleSelect(interaction, value) {
     
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
-    if (freshCfg) {
+    if (freshCfg && interaction.client.guildConfigs) {
       // Fix: Ensure proper merge of fresh config
       Object.assign(cfg, freshCfg);
       interaction.client.guildConfigs.set(interaction.guildId, cfg);
@@ -158,7 +176,7 @@ async function handleComponent(interaction) {
       
       // PATCH: rebuild config subito prima del dashboard
       const freshCfg = await db.getGuildConfig(interaction.guildId);
-      if (freshCfg) {
+      if (freshCfg && interaction.client.guildConfigs) {
         // Fix: Ensure proper merge of fresh config
         Object.assign(cfg, freshCfg);
         interaction.client.guildConfigs.set(interaction.guildId, cfg);
@@ -208,10 +226,10 @@ async function handleModals(interaction) {
       
       // PATCH: rebuild config subito prima del dashboard
       const freshCfg = await db.getGuildConfig(interaction.guildId);
-      if (freshCfg) {
+      if (freshCfg && interaction.client.guildConfigs) {
         // Fix: Ensure proper merge of fresh config
         Object.assign(cfg, freshCfg);
-        interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+        interaction.client.guildConfigs.set(interaction.guildId, cfg);
       }
       
       const { embed, rows } = buildDashboard(interaction);
