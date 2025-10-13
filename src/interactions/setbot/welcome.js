@@ -6,8 +6,14 @@ const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, 
 // Helper: get channels
 function getTextChannels(interaction) {
   try {
+    // Fix: Add null checks to prevent TypeError get
+    if (!interaction || !interaction.guild || !interaction.guild.channels || !interaction.guild.channels.cache) {
+      console.error('[welcome] Missing guild or channels in interaction');
+      return [];
+    }
+    
     return interaction.guild.channels.cache
-      .filter(c => c.type === ChannelType.GuildText)
+      .filter(c => c && c.type === ChannelType.GuildText)
       .map(c => ({ label: `#${c.name}`, value: c.id }))
       .slice(0, 24);
   } catch (error) {
@@ -18,56 +24,92 @@ function getTextChannels(interaction) {
 
 // Helper: ensure config
 function ensureConfig(interaction) {
-  let cfg = interaction.client.guildConfigs.get(interaction.guildId);
-  if (!cfg) {
-    cfg = {
-      guildId: interaction.guildId,
+  try {
+    // Fix: Add null checks to prevent TypeError get
+    if (!interaction || !interaction.client || !interaction.client.guildConfigs) {
+      console.error('[welcome] Missing client or guildConfigs in interaction');
+      return {
+        guildId: interaction?.guildId || null,
+        welcomeEnabled: false,
+        welcomeChannelId: null,
+        welcomeMessage: '{user}'
+      };
+    }
+    
+    let cfg = interaction.client.guildConfigs.get(interaction.guildId);
+    if (!cfg) {
+      cfg = {
+        guildId: interaction.guildId,
+        welcomeEnabled: false,
+        welcomeChannelId: null,
+        welcomeMessage: '{user}'
+      };
+      interaction.client.guildConfigs.set(interaction.guildId, cfg);
+    }
+    if (cfg.welcomeMessage === undefined) cfg.welcomeMessage = '{user}';
+    return cfg;
+  } catch (error) {
+    console.error('[welcome] Error in ensureConfig:', error);
+    return {
+      guildId: interaction?.guildId || null,
       welcomeEnabled: false,
       welcomeChannelId: null,
       welcomeMessage: '{user}'
     };
-    interaction.client.guildConfigs.set(interaction.guildId, cfg);
   }
-  if (cfg.welcomeMessage === undefined) cfg.welcomeMessage = '{user}';
-  return cfg;
 }
 
 // Build dashboard embed + components
 function buildDashboard(interaction) {
-  const cfg = ensureConfig(interaction);
-  const channels = getTextChannels(interaction);
-  
-  const embed = new EmbedBuilder()
-    .setTitle('⚙️ Configurazione: Welcome')
-    .setColor(cfg.welcomeEnabled ? '#43B581' : '#ED4245')
-    .addFields(
-      { name: 'Canale Benvenuto', value: cfg.welcomeChannelId ? `<#${cfg.welcomeChannelId}>` : 'Non impostato', inline: false },
-      { name: 'Messaggio', value: cfg.welcomeMessage || '{user}', inline: false },
-      { name: 'Sistema', value: cfg.welcomeEnabled ? '🟢 ON' : '🔴 OFF', inline: false }
-    );
-
-  const rows = [
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('welcome_channel_select')
-        .setPlaceholder(cfg.welcomeChannelId ? 'Canale impostato' : 'Seleziona canale benvenuto')
-        .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels])
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('welcome_set_message')
-        .setLabel('Imposta Messaggio')
-        .setStyle(1)
-        .setEmoji('✏️'),
-      new ButtonBuilder()
-        .setCustomId('welcome_toggle')
-        .setLabel(cfg.welcomeEnabled ? 'Disattiva' : 'Attiva')
-        .setStyle(cfg.welcomeEnabled ? 4 : 3)
-        .setEmoji(cfg.welcomeEnabled ? '🔴' : '🟢')
-    )
-  ];
-
-  return { embed, rows };
+  try {
+    const cfg = ensureConfig(interaction);
+    const channels = getTextChannels(interaction);
+    
+    // Fix: Add validation for channels array
+    const channelOptions = channels && channels.length > 0 ? channels : [];
+    
+    const embed = new EmbedBuilder()
+      .setTitle('⚙️ Configurazione: Welcome')
+      .setColor(cfg.welcomeEnabled ? '#43B581' : '#ED4245')
+      .addFields(
+        { name: 'Canale Benvenuto', value: cfg.welcomeChannelId ? `<#${cfg.welcomeChannelId}>` : 'Non impostato', inline: false },
+        { name: 'Messaggio', value: cfg.welcomeMessage || '{user}', inline: false },
+        { name: 'Sistema', value: cfg.welcomeEnabled ? '🟢 ON' : '🔴 OFF', inline: false }
+      );
+      
+    // Fix: Ensure we always have at least the 'Nessuno' option
+    const selectOptions = [{ label: 'Nessuno', value: 'none' }, ...channelOptions];
+    
+    const rows = [
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('welcome_channel_select')
+          .setPlaceholder(cfg.welcomeChannelId ? 'Canale impostato' : 'Seleziona canale benvenuto')
+          .addOptions(selectOptions)
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('welcome_set_message')
+          .setLabel('Imposta Messaggio')
+          .setStyle(1)
+          .setEmoji('✏️'),
+        new ButtonBuilder()
+          .setCustomId('welcome_toggle')
+          .setLabel(cfg.welcomeEnabled ? 'Disattiva' : 'Attiva')
+          .setStyle(cfg.welcomeEnabled ? 4 : 3)
+          .setEmoji(cfg.welcomeEnabled ? '🔴' : '🟢')
+      )
+    ];
+    return { embed, rows };
+  } catch (error) {
+    console.error('[welcome] Error in buildDashboard:', error);
+    // Return a basic dashboard in case of error
+    const errorEmbed = new EmbedBuilder()
+      .setTitle('⚙️ Configurazione: Welcome')
+      .setColor('#ED4245')
+      .setDescription('❌ Errore nel caricamento della configurazione');
+    return { embed: errorEmbed, rows: [] };
+  }
 }
 
 // Handle select menus
@@ -85,7 +127,9 @@ async function handleSelect(interaction, value) {
     // PATCH: rebuild config subito prima del dashboard
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
-      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+      // Fix: Ensure proper merge of fresh config
+      Object.assign(cfg, freshCfg);
+      interaction.client.guildConfigs.set(interaction.guildId, cfg);
     }
     
     const { embed, rows } = buildDashboard(interaction);
@@ -115,7 +159,9 @@ async function handleComponent(interaction) {
       // PATCH: rebuild config subito prima del dashboard
       const freshCfg = await db.getGuildConfig(interaction.guildId);
       if (freshCfg) {
-        interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
+        // Fix: Ensure proper merge of fresh config
+        Object.assign(cfg, freshCfg);
+        interaction.client.guildConfigs.set(interaction.guildId, cfg);
       }
       
       const { embed, rows } = buildDashboard(interaction);
@@ -124,6 +170,7 @@ async function handleComponent(interaction) {
     }
     
     if (id === 'welcome_set_message') {
+      const currentCfg = ensureConfig(interaction);
       const modal = new ModalBuilder()
         .setCustomId('welcome_message_modal')
         .setTitle('Imposta Messaggio Welcome');
@@ -134,7 +181,7 @@ async function handleComponent(interaction) {
         .setStyle(TextInputStyle.Paragraph)
         .setPlaceholder('Benvenuto {user}!')
         .setRequired(true)
-        .setValue(ensureConfig(interaction).welcomeMessage || '{user}');
+        .setValue(currentCfg.welcomeMessage || '{user}');
       
       modal.addComponents(new ActionRowBuilder().addComponents(input));
       return interaction.showModal(modal);
@@ -162,6 +209,8 @@ async function handleModals(interaction) {
       // PATCH: rebuild config subito prima del dashboard
       const freshCfg = await db.getGuildConfig(interaction.guildId);
       if (freshCfg) {
+        // Fix: Ensure proper merge of fresh config
+        Object.assign(cfg, freshCfg);
         interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
       }
       
@@ -201,6 +250,10 @@ module.exports = {
       const id = interaction.customId;
       if (id === 'welcome_channel_select') {
         const v = interaction.values?.[0];
+        if (v === undefined) {
+          console.error('[welcome] No value selected in channel select');
+          return interaction.reply({ content: '❌ Nessun canale selezionato.', ephemeral: true }).catch(() => {});
+        }
         return handleSelect(interaction, v);
       }
       return handleComponent(interaction);
