@@ -1,149 +1,282 @@
-// Refactored: 2025-10-14 - Dashboard musica ottimizzata (pattern: select-only, embed live, gestione errori)
-// Architettura: solo select menu per canale musica, embed con stato/canale/preview, no bottoni, codice pulito/difensivo
-// Pattern: onComponent, buildDashboard (ref: goodbye.js)
+// Updated: 2025-10-14 - Dashboard Musica con select canale + 4 azioni
+// Requisiti: solo select menu per canale musica (voice), bottoni: On/Off, Ripristina, Messaggio (modal), Anteprima
+// Ogni azione aggiorna live la preview e le variabili. Interfaccia minimale, codice difensivo, nessun elemento in home.
 
 const db = require('../../database/db');
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require('discord.js');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ChannelType,
+} = require('discord.js');
 
-// Helper: get voice channels per select menu
+// Helpers
 function getVoiceChannels(interaction) {
   try {
     const channels = interaction.guild.channels.cache
-      .filter(c => c.type === ChannelType.GuildVoice)
-      .map(c => ({ label: `🔊 ${c.name}`, value: c.id }))
+      .filter((c) => c.type === ChannelType.GuildVoice)
+      .map((c) => ({ label: `🔊 ${c.name}`, value: c.id }))
       .slice(0, 24);
-    return channels.length > 0 ? channels : [{ label: 'Nessun canale vocale disponibile', value: 'unavailable' }];
+    return channels.length > 0
+      ? channels
+      : [{ label: 'Nessun canale vocale disponibile', value: 'unavailable' }];
   } catch (err) {
     console.error('[music.js] Errore recupero canali vocali:', err);
     return [{ label: 'Errore caricamento canali', value: 'error' }];
   }
 }
 
-// Helper: ensure config con valori di default
 function ensureConfig(interaction) {
-  let cfg = interaction.client.guildConfigs.get(interaction.guildId);
+  let cfg = interaction.client.guildConfigs?.get(interaction.guildId);
   if (!cfg) {
     cfg = {
       guildId: interaction.guildId,
       musicEnabled: false,
-      musicVoiceChannelId: null
+      musicVoiceChannelId: null,
+      musicMsg: {
+        title: null,
+        description: null,
+        image: null,
+      },
     };
+    if (!interaction.client.guildConfigs) interaction.client.guildConfigs = new Map();
     interaction.client.guildConfigs.set(interaction.guildId, cfg);
   }
-  // Normalize boolean
   if (typeof cfg.musicEnabled !== 'boolean') cfg.musicEnabled = false;
   if (cfg.musicVoiceChannelId === undefined) cfg.musicVoiceChannelId = null;
+  if (!cfg.musicMsg) cfg.musicMsg = { title: null, description: null, image: null };
   return cfg;
 }
 
-// Build dashboard embed + components
-function buildDashboard(interaction) {
+function buildEmbed(interaction) {
   const cfg = ensureConfig(interaction);
-  const channels = getVoiceChannels(interaction);
-
-  // Stato live: ON/OFF con colore e descrizione
   const statusEmoji = cfg.musicEnabled ? '🟢' : '🔴';
   const statusText = cfg.musicEnabled ? 'ON' : 'OFF';
-  const statusColor = cfg.musicEnabled ? '#43B581' : '#ED4245';
-
-  // Canale: nome o placeholder
-  const channelDisplay = cfg.musicVoiceChannelId
-    ? `<#${cfg.musicVoiceChannelId}>`
-    : '`Non configurato`';
-
-  // Descrizione con preview attuale
-  const description = `**Stato**: ${statusEmoji} **${statusText}**\n**Canale Musica**: ${channelDisplay}`;
+  const statusColor = cfg.musicEnabled ? 0x43b581 : 0xed4245;
+  const channelDisplay = cfg.musicVoiceChannelId ? `<#${cfg.musicVoiceChannelId}>` : '`Non configurato`';
 
   const embed = new EmbedBuilder()
-    .setTitle('🎵 Dashboard Musica')
-    .setDescription(description)
-    .setColor(statusColor)
-    .addFields(
-      {
-        name: '📋 Azioni Disponibili',
-        value: '• Seleziona il canale vocale dedicato alla musica dal menu sottostante\n• Il sistema si abiliterà automaticamente quando configurato',
-        inline: false
-      }
+    .setTitle(cfg.musicMsg.title || '🎵 Dashboard Musica')
+    .setDescription(
+      (cfg.musicMsg.description || '') +
+        (cfg.musicMsg.description ? '\n\n' : '') +
+        `**Stato**: ${statusEmoji} **${statusText}**\n**Canale Musica**: ${channelDisplay}`
     )
+    .setColor(statusColor)
+    .addFields({
+      name: '📋 Azioni',
+      value:
+        '• Scegli il canale vocale dal menu\n' +
+        '• Usa i pulsanti per abilitare/disabilitare, ripristinare, impostare messaggio o anteprima',
+      inline: false,
+    })
     .setFooter({ text: 'Configurazione Musica' })
     .setTimestamp();
 
-  // Select menu per canale musica
+  if (cfg.musicMsg.image) {
+    try {
+      embed.setImage(cfg.musicMsg.image);
+    } catch (e) {
+      // ignora URL immagine non valida
+    }
+  }
+  return embed;
+}
+
+function buildComponents(interaction) {
+  const cfg = ensureConfig(interaction);
+  const channels = getVoiceChannels(interaction);
+
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId('music_channel_select')
     .setPlaceholder(cfg.musicVoiceChannelId ? '🔊 Canale impostato' : '🎵 Seleziona canale musica')
-    .addOptions([
-      { label: '🚫 Nessun canale (disabilita)', value: 'none', description: 'Disabilita il sistema musica' },
-      ...channels
-    ]);
+    .addOptions([{ label: '🚫 Nessun canale (disabilita)', value: 'none', description: 'Disabilita la musica' }, ...channels]);
 
-  const row = new ActionRowBuilder().addComponents(selectMenu);
-  return { embed, rows: [row] };
+  const btnOnOff = new ButtonBuilder()
+    .setCustomId('music_toggle')
+    .setLabel(cfg.musicEnabled ? 'Spegni' : 'Accendi')
+    .setStyle(cfg.musicEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
+
+  const btnReset = new ButtonBuilder().setCustomId('music_reset').setLabel('Ripristina').setStyle(ButtonStyle.Secondary);
+
+  const btnMsg = new ButtonBuilder().setCustomId('music_message').setLabel('Messaggio').setStyle(ButtonStyle.Primary);
+
+  const btnPreview = new ButtonBuilder().setCustomId('music_preview').setLabel('Anteprima').setStyle(ButtonStyle.Secondary);
+
+  const row1 = new ActionRowBuilder().addComponents(selectMenu);
+  const row2 = new ActionRowBuilder().addComponents(btnOnOff, btnReset, btnMsg, btnPreview);
+  return [row1, row2];
 }
 
-// Handle select menu
+function buildDashboard(interaction) {
+  return { embed: buildEmbed(interaction), rows: buildComponents(interaction) };
+}
+
+async function persist(interaction) {
+  const cfg = ensureConfig(interaction);
+  try {
+    await db.updateGuildConfig(interaction.guildId, {
+      musicEnabled: cfg.musicEnabled,
+      musicVoiceChannelId: cfg.musicVoiceChannelId,
+      musicMsg: cfg.musicMsg,
+    });
+    const fresh = await db.getGuildConfig(interaction.guildId);
+    if (fresh) interaction.client.guildConfigs.set(interaction.guildId, fresh);
+  } catch (e) {
+    console.error('[music.js] Persist error:', e);
+  }
+}
+
 async function handleSelect(interaction, channelId) {
   try {
     await interaction.deferUpdate();
     const cfg = ensureConfig(interaction);
-
-    // Gestione selezione
     if (channelId === 'none') {
       cfg.musicVoiceChannelId = null;
       cfg.musicEnabled = false;
     } else if (channelId === 'unavailable' || channelId === 'error') {
-      return interaction.editReply({
-        content: '❌ Impossibile configurare: nessun canale vocale disponibile.',
-        embeds: [],
-        components: []
-      });
+      return interaction.editReply({ content: '❌ Nessun canale vocale disponibile.', embeds: [], components: [] });
     } else {
-      // Verifica che il canale esista ancora
       const channel = interaction.guild.channels.cache.get(channelId);
       if (!channel || channel.type !== ChannelType.GuildVoice) {
-        return interaction.editReply({
-          content: '❌ Canale vocale non valido o non più disponibile.',
-          embeds: [],
-          components: []
-        });
+        return interaction.editReply({ content: '❌ Canale vocale non valido.', embeds: [], components: [] });
       }
       cfg.musicVoiceChannelId = channelId;
       cfg.musicEnabled = true;
     }
-
-    // Update DB
-    await db.updateGuildConfig(interaction.guildId, {
-      musicVoiceChannelId: cfg.musicVoiceChannelId,
-      musicEnabled: cfg.musicEnabled
-    });
-
-    // Rebuild config from DB
-    const freshCfg = await db.getGuildConfig(interaction.guildId);
-    if (freshCfg) {
-      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-    }
-
-    // Rebuild dashboard
+    await persist(interaction);
     const { embed, rows } = buildDashboard(interaction);
     return interaction.editReply({ embeds: [embed], components: rows });
   } catch (err) {
     console.error('[music.js] Errore handleSelect:', err);
-    return interaction.editReply({
-      content: '❌ Errore durante l\'aggiornamento della configurazione musica.',
-      embeds: [],
-      components: []
-    }).catch(() => {});
+    return interaction
+      .editReply({ content: "❌ Errore durante l'aggiornamento della configurazione musica.", embeds: [], components: [] })
+      .catch(() => {});
+  }
+}
+
+async function handleToggle(interaction) {
+  try {
+    await interaction.deferUpdate();
+    const cfg = ensureConfig(interaction);
+    cfg.musicEnabled = !cfg.musicEnabled;
+    await persist(interaction);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  } catch (e) {
+    console.error('[music.js] Errore toggle:', e);
+    return interaction.editReply({ content: '❌ Errore toggle.', embeds: [], components: [] }).catch(() => {});
+  }
+}
+
+async function handleReset(interaction) {
+  try {
+    await interaction.deferUpdate();
+    const cfg = ensureConfig(interaction);
+    cfg.musicEnabled = false;
+    cfg.musicVoiceChannelId = null;
+    cfg.musicMsg = { title: null, description: null, image: null };
+    await persist(interaction);
+    const { embed, rows } = buildDashboard(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  } catch (e) {
+    console.error('[music.js] Errore reset:', e);
+    return interaction.editReply({ content: '❌ Errore ripristino.', embeds: [], components: [] }).catch(() => {});
+  }
+}
+
+async function handleMessageModalOpen(interaction) {
+  try {
+    const cfg = ensureConfig(interaction);
+    const modal = new ModalBuilder().setCustomId('music_message_modal').setTitle('Messaggio musica');
+
+    const titleInput = new TextInputBuilder()
+      .setCustomId('music_msg_title')
+      .setLabel('Titolo (opzionale)')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setValue(cfg.musicMsg.title || '');
+
+    const descInput = new TextInputBuilder()
+      .setCustomId('music_msg_desc')
+      .setLabel('Descrizione (opzionale)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(false)
+      .setValue(cfg.musicMsg.description || '');
+
+    const imgInput = new TextInputBuilder()
+      .setCustomId('music_msg_img')
+      .setLabel('URL immagine (opzionale)')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setValue(cfg.musicMsg.image || '');
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(descInput),
+      new ActionRowBuilder().addComponents(imgInput)
+    );
+
+    return interaction.showModal(modal);
+  } catch (e) {
+    console.error('[music.js] Errore apertura modal:', e);
+    return interaction.reply({ content: '❌ Errore apertura modale.', ephemeral: true }).catch(() => {});
+  }
+}
+
+async function handleMessageModalSubmit(interaction) {
+  try {
+    const cfg = ensureConfig(interaction);
+    const title = interaction.fields.getTextInputValue('music_msg_title')?.trim() || null;
+    const description = interaction.fields.getTextInputValue('music_msg_desc')?.trim() || null;
+    const image = interaction.fields.getTextInputValue('music_msg_img')?.trim() || null;
+
+    // Validazione immagine basica
+    const imgOk = !image || /^https?:\/\//i.test(image);
+
+    cfg.musicMsg = {
+      title,
+      description,
+      image: imgOk ? image : null,
+    };
+
+    await persist(interaction);
+
+    const { embed, rows } = buildDashboard(interaction);
+    if (interaction.replied || interaction.deferred) {
+      return interaction.editReply({ embeds: [embed], components: rows });
+    }
+    return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+  } catch (e) {
+    console.error('[music.js] Errore submit modal:', e);
+    return interaction.reply({ content: '❌ Errore salvataggio messaggio.', ephemeral: true }).catch(() => {});
+  }
+}
+
+async function handlePreview(interaction) {
+  try {
+    await interaction.deferUpdate();
+    const embed = buildEmbed(interaction);
+    const rows = buildComponents(interaction);
+    return interaction.editReply({ embeds: [embed], components: rows });
+  } catch (e) {
+    console.error('[music.js] Errore anteprima:', e);
+    return interaction.editReply({ content: '❌ Errore anteprima.', embeds: [], components: [] }).catch(() => {});
   }
 }
 
 module.exports = {
-  // Fallback execute per compatibilità
+  // compatibilità
   async execute(interaction) {
     if (typeof this.showPanel === 'function') return this.showPanel(interaction);
     return interaction.reply({ content: '❌ Dashboard musica non implementata correttamente!', ephemeral: true });
   },
 
-  // Entrypoint: render dashboard
   async handleMusic(interaction) {
     try {
       const { embed, rows } = buildDashboard(interaction);
@@ -161,22 +294,33 @@ module.exports = {
     }
   },
 
-  // Router per select menu
   async onComponent(interaction) {
     const id = interaction.customId;
-    if (id === 'music_channel_select') {
-      const channelId = interaction.values?.[0];
-      if (!channelId) {
-        return interaction.reply({ content: '❌ Nessun canale selezionato.', ephemeral: true });
+    try {
+      if (id === 'music_channel_select') {
+        const channelId = interaction.values?.[0];
+        if (!channelId) return interaction.reply({ content: '❌ Nessun canale selezionato.', ephemeral: true });
+        return handleSelect(interaction, channelId);
       }
-      return handleSelect(interaction, channelId);
+      if (id === 'music_toggle') return handleToggle(interaction);
+      if (id === 'music_reset') return handleReset(interaction);
+      if (id === 'music_message') return handleMessageModalOpen(interaction);
+      if (id === 'music_preview') return handlePreview(interaction);
+      return interaction.reply({ content: '❌ Componente non riconosciuto.', ephemeral: true });
+    } catch (e) {
+      console.error('[music.js] onComponent error:', e);
+      return interaction.reply({ content: '❌ Errore componente.', ephemeral: true }).catch(() => {});
     }
-    // Nessun altro componente gestito
-    return interaction.reply({ content: '❌ Componente non riconosciuto.', ephemeral: true });
   },
 
-  // Alias per compatibilità con setbot.js
+  async onModalSubmit(interaction) {
+    if (interaction.customId === 'music_message_modal') {
+      return handleMessageModalSubmit(interaction);
+    }
+    return interaction.reply({ content: '❌ Modale non riconosciuta.', ephemeral: true }).catch(() => {});
+  },
+
   async showPanel(interaction) {
     return this.handleMusic(interaction);
-  }
+  },
 };
