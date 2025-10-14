@@ -1,30 +1,38 @@
-// Patch: questa dashboard aggiorna in real-time dopo ogni interazione. Sequenza: deferUpdate > update DB > rebuild config > buildDashboard > editReply
-// Refactored: 2025-10-12 - Dashboard music con aggiornamento live immediato
-// Pattern: onComponent, onModal, buildDashboard (ref: verification.js)
-const db = require('../../database/db');
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+// Refactored: 2025-10-14 - Dashboard musica ottimizzata (pattern: select-only, embed live, gestione errori)
+// Architettura: solo select menu per canale musica, embed con stato/canale/preview, no bottoni, codice pulito/difensivo
+// Pattern: onComponent, buildDashboard (ref: goodbye.js)
 
-// Helper: get voice channels
+const db = require('../../database/db');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require('discord.js');
+
+// Helper: get voice channels per select menu
 function getVoiceChannels(interaction) {
-  return interaction.guild.channels.cache
-    .filter(c => c.type === ChannelType.GuildVoice)
-    .map(c => ({ label: c.name, value: c.id }))
-    .slice(0, 24);
+  try {
+    const channels = interaction.guild.channels.cache
+      .filter(c => c.type === ChannelType.GuildVoice)
+      .map(c => ({ label: `🔊 ${c.name}`, value: c.id }))
+      .slice(0, 24);
+    return channels.length > 0 ? channels : [{ label: 'Nessun canale vocale disponibile', value: 'unavailable' }];
+  } catch (err) {
+    console.error('[music.js] Errore recupero canali vocali:', err);
+    return [{ label: 'Errore caricamento canali', value: 'error' }];
+  }
 }
 
-// Helper: ensure config
+// Helper: ensure config con valori di default
 function ensureConfig(interaction) {
   let cfg = interaction.client.guildConfigs.get(interaction.guildId);
   if (!cfg) {
     cfg = {
       guildId: interaction.guildId,
       musicEnabled: false,
-      musicVoiceChannelId: null,
-      musicVolume: 50
+      musicVoiceChannelId: null
     };
     interaction.client.guildConfigs.set(interaction.guildId, cfg);
   }
-  if (cfg.musicVolume === undefined) cfg.musicVolume = 50;
+  // Normalize boolean
+  if (typeof cfg.musicEnabled !== 'boolean') cfg.musicEnabled = false;
+  if (cfg.musicVoiceChannelId === undefined) cfg.musicVoiceChannelId = null;
   return cfg;
 }
 
@@ -32,155 +40,143 @@ function ensureConfig(interaction) {
 function buildDashboard(interaction) {
   const cfg = ensureConfig(interaction);
   const channels = getVoiceChannels(interaction);
-  
+
+  // Stato live: ON/OFF con colore e descrizione
+  const statusEmoji = cfg.musicEnabled ? '🟢' : '🔴';
+  const statusText = cfg.musicEnabled ? 'ON' : 'OFF';
+  const statusColor = cfg.musicEnabled ? '#43B581' : '#ED4245';
+
+  // Canale: nome o placeholder
+  const channelDisplay = cfg.musicVoiceChannelId
+    ? `<#${cfg.musicVoiceChannelId}>`
+    : '`Non configurato`';
+
+  // Descrizione con preview attuale
+  const description = `**Stato**: ${statusEmoji} **${statusText}**\n**Canale Musica**: ${channelDisplay}`;
+
   const embed = new EmbedBuilder()
-    .setTitle('⚙️ Configurazione Music')
-    .setColor(cfg.musicEnabled ? '#43B581' : '#ED4245')
+    .setTitle('🎵 Dashboard Musica')
+    .setDescription(description)
+    .setColor(statusColor)
     .addFields(
-      { name: 'Canale Vocale', value: cfg.musicVoiceChannelId ? `<#${cfg.musicVoiceChannelId}>` : 'Non impostato', inline: false },
-      { name: 'Volume', value: `${cfg.musicVolume || 50}%`, inline: true },
-      { name: 'Sistema', value: cfg.musicEnabled ? '🟢 ON' : '🔴 OFF', inline: true }
+      {
+        name: '📋 Azioni Disponibili',
+        value: '• Seleziona il canale vocale dedicato alla musica dal menu sottostante\n• Il sistema si abiliterà automaticamente quando configurato',
+        inline: false
+      }
     )
+    .setFooter({ text: 'Configurazione Musica' })
     .setTimestamp();
 
-  const rows = [
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('music_channel_select')
-        .setPlaceholder(cfg.musicVoiceChannelId ? 'Canale impostato' : 'Seleziona canale vocale')
-        .addOptions([{ label: 'Nessuno', value: 'none' }, ...channels])
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('music_set_volume')
-        .setLabel('Imposta Volume')
-        .setStyle(1)
-        .setEmoji('🔊'),
-      new ButtonBuilder()
-        .setCustomId('music_toggle')
-        .setLabel(cfg.musicEnabled ? 'Disabilita' : 'Abilita')
-        .setStyle(cfg.musicEnabled ? 4 : 3)
-        .setEmoji(cfg.musicEnabled ? '❌' : '✅')
-    )
-  ];
+  // Select menu per canale musica
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('music_channel_select')
+    .setPlaceholder(cfg.musicVoiceChannelId ? '🔊 Canale impostato' : '🎵 Seleziona canale musica')
+    .addOptions([
+      { label: '🚫 Nessun canale (disabilita)', value: 'none', description: 'Disabilita il sistema musica' },
+      ...channels
+    ]);
 
-  return { embed, rows };
+  const row = new ActionRowBuilder().addComponents(selectMenu);
+  return { embed, rows: [row] };
 }
 
 // Handle select menu
 async function handleSelect(interaction, channelId) {
-  // PATCH: sempre deferUpdate all'inizio
-  await interaction.deferUpdate();
-  const cfg = ensureConfig(interaction);
-  const newId = channelId === 'none' ? null : channelId;
-  cfg.musicVoiceChannelId = newId;
-  // PATCH: update DB prima
-  await db.updateGuildConfig(interaction.guildId, { musicVoiceChannelId: newId });
-  // PATCH: rebuild config subito prima del dashboard
-  const freshCfg = await db.getGuildConfig(interaction.guildId);
-  if (freshCfg) {
-    interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-  }
-  const { embed, rows } = buildDashboard(interaction);
-  // PATCH: usa editReply
-  return interaction.editReply({ embeds: [embed], components: rows });
-}
-
-// Handle buttons
-async function handleComponent(interaction) {
-  const id = interaction.customId;
-  const cfg = ensureConfig(interaction);
-
-  if (id === 'music_toggle') {
-    // PATCH: sempre deferUpdate all'inizio
+  try {
     await interaction.deferUpdate();
-    const newVal = !cfg.musicEnabled;
-    cfg.musicEnabled = newVal;
-    // PATCH: update DB prima
-    await db.updateGuildConfig(interaction.guildId, { musicEnabled: newVal });
-    // PATCH: rebuild config subito prima del dashboard
+    const cfg = ensureConfig(interaction);
+
+    // Gestione selezione
+    if (channelId === 'none') {
+      cfg.musicVoiceChannelId = null;
+      cfg.musicEnabled = false;
+    } else if (channelId === 'unavailable' || channelId === 'error') {
+      return interaction.editReply({
+        content: '❌ Impossibile configurare: nessun canale vocale disponibile.',
+        embeds: [],
+        components: []
+      });
+    } else {
+      // Verifica che il canale esista ancora
+      const channel = interaction.guild.channels.cache.get(channelId);
+      if (!channel || channel.type !== ChannelType.GuildVoice) {
+        return interaction.editReply({
+          content: '❌ Canale vocale non valido o non più disponibile.',
+          embeds: [],
+          components: []
+        });
+      }
+      cfg.musicVoiceChannelId = channelId;
+      cfg.musicEnabled = true;
+    }
+
+    // Update DB
+    await db.updateGuildConfig(interaction.guildId, {
+      musicVoiceChannelId: cfg.musicVoiceChannelId,
+      musicEnabled: cfg.musicEnabled
+    });
+
+    // Rebuild config from DB
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
+
+    // Rebuild dashboard
     const { embed, rows } = buildDashboard(interaction);
-    // PATCH: usa editReply
     return interaction.editReply({ embeds: [embed], components: rows });
-  }
-
-  if (id === 'music_set_volume') {
-    const modal = new ModalBuilder()
-      .setCustomId('music_volume_modal')
-      .setTitle('Imposta Volume Musica');
-    const input = new TextInputBuilder()
-      .setCustomId('volume_value')
-      .setLabel('Volume (1-100%)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('50')
-      .setValue(String(cfg.musicVolume || 50))
-      .setRequired(true)
-      .setMinLength(1)
-      .setMaxLength(3);
-    const row = new ActionRowBuilder().addComponents(input);
-    modal.addComponents(row);
-    return interaction.showModal(modal);
-  }
-}
-
-// Handle modals
-async function handleModals(interaction) {
-  // PATCH: sempre deferUpdate all'inizio
-  await interaction.deferUpdate();
-  const cfg = ensureConfig(interaction);
-
-  if (interaction.customId === 'music_volume_modal') {
-    const volume = parseInt(interaction.fields.getTextInputValue('volume_value'), 10);
-    if (isNaN(volume) || volume < 1 || volume > 100) {
-      return interaction.editReply({ content: 'Il volume deve essere tra 1 e 100%.', components: [], embeds: [] });
-    }
-    cfg.musicVolume = volume;
-    // PATCH: update DB prima
-    await db.updateGuildConfig(interaction.guildId, { musicVolume: volume });
-    // PATCH: rebuild config subito prima del dashboard
-    const freshCfg = await db.getGuildConfig(interaction.guildId);
-    if (freshCfg) {
-      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-    }
-    const { embed, rows } = buildDashboard(interaction);
-    // PATCH: usa editReply
-    return interaction.editReply({ embeds: [embed], components: rows });
+  } catch (err) {
+    console.error('[music.js] Errore handleSelect:', err);
+    return interaction.editReply({
+      content: '❌ Errore durante l\'aggiornamento della configurazione musica.',
+      embeds: [],
+      components: []
+    }).catch(() => {});
   }
 }
 
 module.exports = {
-  async execute(interaction) { if (typeof this.showPanel==='function') return this.showPanel(interaction); if (typeof this.handleVerification==='function') return this.handleVerification(interaction); return interaction.reply({content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true}); },
-
-  // Entrypoint to render dashboard
-  async handleMusic(interaction) {
-    const { embed, rows } = buildDashboard(interaction);
-    if (interaction.replied || interaction.deferred) {
-      return interaction.editReply({ embeds: [embed], components: rows });
-    }
-    return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+  // Fallback execute per compatibilità
+  async execute(interaction) {
+    if (typeof this.showPanel === 'function') return this.showPanel(interaction);
+    return interaction.reply({ content: '❌ Dashboard musica non implementata correttamente!', ephemeral: true });
   },
-  
-  // Router for selects/buttons
+
+  // Entrypoint: render dashboard
+  async handleMusic(interaction) {
+    try {
+      const { embed, rows } = buildDashboard(interaction);
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ embeds: [embed], components: rows });
+      }
+      return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
+    } catch (err) {
+      console.error('[music.js] Errore handleMusic:', err);
+      const errorMsg = '❌ Errore durante il caricamento della dashboard musica.';
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: errorMsg, embeds: [], components: [] });
+      }
+      return interaction.reply({ content: errorMsg, ephemeral: true });
+    }
+  },
+
+  // Router per select menu
   async onComponent(interaction) {
     const id = interaction.customId;
     if (id === 'music_channel_select') {
-      const v = interaction.values?.[0];
-      return handleSelect(interaction, v);
+      const channelId = interaction.values?.[0];
+      if (!channelId) {
+        return interaction.reply({ content: '❌ Nessun canale selezionato.', ephemeral: true });
+      }
+      return handleSelect(interaction, channelId);
     }
-    return handleComponent(interaction);
-  },
-  
-  // Router for modals
-  async onModal(interaction) {
-    return handleModals(interaction);
+    // Nessun altro componente gestito
+    return interaction.reply({ content: '❌ Componente non riconosciuto.', ephemeral: true });
   },
 
-  // Alias for compatibility with setbot.js
-  async showPanel(interaction, config) {
+  // Alias per compatibilità con setbot.js
+  async showPanel(interaction) {
     return this.handleMusic(interaction);
   }
 };
