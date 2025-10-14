@@ -1,4 +1,4 @@
-// Dashboard Welcome Embed Customization — 2025-10-13
+// Dashboard Welcome Embed Customization — 2025-10-14
 // OTTIMIZZATO: Solo select canale, aggiornamento live istantaneo, niente bottoni
 // Flow: selezione -> aggiorna DB -> ricostruisci dashboard -> editReply istantaneo
 
@@ -15,6 +15,7 @@ const {
 function getTextChannels(interaction) {
   try {
     if (!interaction?.guild?.channels?.cache) return [];
+    
     const channels = interaction.guild.channels.cache
       .filter((c) => c?.type === ChannelType.GuildText)
       .map((c) => ({ label: `#${c.name}`, value: c.id }))
@@ -24,6 +25,7 @@ function getTextChannels(interaction) {
     if (channels.length === 0) {
       return [{ label: 'Nessun canale disponibile', value: 'none', default: true }];
     }
+    
     return channels;
   } catch (e) {
     console.error('[welcome] Error fetching channels:', e);
@@ -38,7 +40,7 @@ function ensureConfig(interaction) {
       console.error('[welcome] Missing guildId in interaction');
       return getDefaultConfig(null);
     }
-
+    
     const cfg = db.getGuildConfig(guildId) || {};
     
     return {
@@ -96,7 +98,7 @@ function buildDashboard(interaction) {
     if (cfg.welcomeEmbed.image) {
       embed.setImage(cfg.welcomeEmbed.image);
     }
-
+    
     // 3. Aggiungi campo informativo con TUTTE le variabili correnti
     const statusLines = [
       `🔔 **Stato**: ${cfg.welcomeEnabled ? '✅ Attivo' : '❌ Disattivo'}`,
@@ -106,8 +108,13 @@ function buildDashboard(interaction) {
       `🖼️ **Immagine**: ${cfg.welcomeEmbed.image ? '✅ Impostata' : '❌ Nessuna'}`,
       `📌 **Footer**: ${cfg.welcomeEmbed.footer || 'Arrivato oggi'}`,
     ];
-    embed.addFields({ name: '⚙️ Configurazione Corrente', value: statusLines.join('\n'), inline: false });
-
+    
+    embed.addFields({ 
+      name: '⚙️ Configurazione Corrente', 
+      value: statusLines.join('\n'), 
+      inline: false 
+    });
+    
     // 4. Ottieni lista canali
     const channels = getTextChannels(interaction);
     
@@ -120,9 +127,9 @@ function buildDashboard(interaction) {
           : 'Seleziona canale di benvenuto'
       )
       .addOptions(channels);
-
+    
     const row = new ActionRowBuilder().addComponents(selectMenu);
-
+    
     return { embeds: [embed], components: [row] };
   } catch (error) {
     console.error('[welcome] buildDashboard error:', error);
@@ -156,7 +163,12 @@ async function updateDashboard(interaction) {
     console.error('[welcome] updateDashboard error:', error);
     
     try {
-      const errorMsg = { content: '❌ Errore durante l\'aggiornamento.', embeds: [], components: [] };
+      const errorMsg = { 
+        content: '❌ Errore durante l\'aggiornamento.', 
+        embeds: [], 
+        components: [] 
+      };
+      
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(errorMsg);
       } else {
@@ -183,7 +195,7 @@ async function handleChannelSelect(interaction) {
       });
       return;
     }
-
+    
     // 1. Ottieni config corrente
     const cfg = ensureConfig(interaction);
     
@@ -228,7 +240,12 @@ module.exports = {
       console.error('[welcome] execute error:', error);
       
       try {
-        const errorMsg = { content: '❌ Errore nell\'esecuzione.', embeds: [], components: [] };
+        const errorMsg = { 
+          content: '❌ Errore nell\'esecuzione.', 
+          embeds: [], 
+          components: [] 
+        };
+        
         if (interaction.replied || interaction.deferred) {
           await interaction.editReply(errorMsg);
         } else {
