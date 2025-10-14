@@ -1,13 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 
-// Centralized, fully reactive Verification dashboard like welcome/moderation/goodbye
-// - Single source of truth in guildConfigs.verification
-// - buildDashboard builds entire message (embed + selects + buttons)
-// - updateDashboard recomputes everything on any selection/action
-// - Live variable handling via modals/selects immediately updates config and preview
-// - Defensive checks, no double replies, consistent deferred/replied handling
-
-// Utilities shared with other modules (align to existing pattern across setbot/*)
+// Single source of truth kept in client.guildConfigs[guildId].verification
 function initializeGuildConfigs(client) {
   if (!client) throw new Error('Client object is required');
   if (!client.guildConfigs) client.guildConfigs = new Map();
@@ -26,11 +19,14 @@ function ensureGuildConfig(interaction) {
         roleId: null,
         logChannelId: null,
         messageId: null,
-        buttonLabel: 'Verify',
+        buttonLabel: '✅ Verifica',
         buttonStyle: 'Success', // Primary, Secondary, Success, Danger
-        title: 'Verification',
-        description: 'Press the button to verify and receive the role.',
+        title: '🔐 Verifica',
+        description: 'Premi il bottone per verificarti e ricevere il ruolo.',
+        image: null,
+        footer: null,
       },
+      // Other modules keep shape for consistency
       welcome: { enabled: false },
       goodbye: { enabled: false },
       moderation: { enabled: false },
@@ -53,206 +49,210 @@ function hasBotPermsInChannel(channel) {
       PermissionsBitField.Flags.EmbedLinks,
       PermissionsBitField.Flags.ReadMessageHistory,
       PermissionsBitField.Flags.AddReactions,
-    ]) ?? false;
+    ]);
   } catch {
     return false;
   }
 }
 
-// Options builders
-function buildModuleSelect(current) {
+// UI builders
+function buildVerificationEmbed(interaction, cfg) {
+  const guild = interaction.guild;
+  const channel = cfg.channelId ? guild.channels.cache.get(cfg.channelId) : null;
+  const role = cfg.roleId ? guild.roles.cache.get(cfg.roleId) : null;
+
+  const enabledLine = cfg.enabled ? '🟢 Attivo' : '🔴 Disattivo';
+  const channelLine = channel ? `#${channel.name}` : '❌ Canale non impostato';
+  const roleLine = role ? `@${role.name}` : '❌ Ruolo non impostato';
+
+  const eb = new EmbedBuilder()
+    .setColor(cfg.enabled ? 0x57F287 : 0xED4245)
+    .setTitle(cfg.title || '🔐 Verifica')
+    .setDescription(cfg.description || 'Premi il bottone per verificarti e ricevere il ruolo.')
+    .addFields(
+      { name: 'Stato', value: enabledLine, inline: true },
+      { name: 'Canale', value: channelLine, inline: true },
+      { name: 'Ruolo', value: roleLine, inline: true },
+    );
+
+  if (cfg.image) eb.setImage(cfg.image);
+  if (cfg.footer) eb.setFooter({ text: cfg.footer });
+
+  return eb;
+}
+
+function buildChannelSelect(interaction, cfg) {
+  const options = interaction.guild.channels.cache
+    .filter(c => [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(c.type))
+    .map(c => ({ label: `#${c.name}`, value: c.id }));
+
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId('verification:module')
-      .setPlaceholder('Seleziona sezione')
-      .addOptions([
-        { label: 'Impostazioni', value: 'settings', description: 'Abilita, canali, ruolo, log', default: current === 'settings' },
-        { label: 'Contenuti', value: 'content', description: "Titolo, descrizione, bottone", default: current === 'content' },
-        { label: 'Anteprima', value: 'preview', description: 'Vedi come appare', default: current === 'preview' },
-      ])
+      .setCustomId('verification:select_channel')
+      .setPlaceholder('📺 Seleziona il canale di verifica')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(options.slice(0, 25))
   );
 }
 
-function buildSettingsRows(cfg, interaction) {
-  const guild = interaction.guild;
-  const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && hasBotPermsInChannel(c));
-  const channelOptions = Array.from(channels.values()).slice(0, 25).map(c => ({ label: `#${c.name}`, value: c.id, default: cfg.channelId === c.id }));
+function buildRoleSelect(interaction, cfg) {
+  const options = interaction.guild.roles.cache
+    .filter(r => !r.managed && r.editable)
+    .map(r => ({ label: r.name, value: r.id }))
+    .slice(0, 25);
 
-  const roleOptions = guild.roles.cache.filter(r => r.editable && r.id !== guild.roles.everyone.id).map(r => ({ label: r.name, value: r.id, default: cfg.roleId === r.id })).slice(0, 25);
-
-  const logChannelOptions = Array.from(channels.values()).slice(0, 25).map(c => ({ label: `#${c.name}`, value: c.id, default: cfg.logChannelId === c.id }));
-
-  return [
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('verification:enabled')
-        .setPlaceholder('Abilita modulo')
-        .addOptions([
-          { label: 'Abilitato', value: 'on', description: 'Attiva la verifica', default: cfg.enabled === true },
-          { label: 'Disabilitato', value: 'off', description: 'Disattiva la verifica', default: cfg.enabled === false },
-        ])
-    ),
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('verification:channel')
-        .setPlaceholder('Seleziona canale di verifica')
-        .addOptions(channelOptions.length ? channelOptions : [{ label: 'Nessun canale disponibile', value: 'none' }])
-    ),
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('verification:role')
-        .setPlaceholder('Seleziona ruolo da assegnare')
-        .addOptions(roleOptions.length ? roleOptions : [{ label: 'Nessun ruolo idoneo', value: 'none' }])
-    ),
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('verification:logchannel')
-        .setPlaceholder('Seleziona canale log (opzionale)')
-        .addOptions(logChannelOptions.length ? logChannelOptions : [{ label: 'Nessun canale disponibile', value: 'none' }])
-    ),
-  ];
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('verification:select_role')
+      .setPlaceholder('🧩 Seleziona il ruolo da assegnare')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(options.length ? options : [{ label: 'Nessun ruolo disponibile', value: 'none', description: 'Crea un ruolo prima', default: true }])
+  );
 }
 
-function buildContentRows(cfg) {
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('verification:edit_title').setLabel('Titolo').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('verification:edit_description').setLabel('Descrizione').setStyle(ButtonStyle.Primary),
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('verification:edit_button_label').setLabel('Testo Bottone').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('verification:cycle_button_style').setLabel(`Stile: ${cfg.buttonStyle}`).setStyle(ButtonStyle.Secondary),
-    ),
-  ];
+function buildControlButtons(cfg) {
+  const onOff = new ButtonBuilder()
+    .setCustomId('verification:toggle')
+    .setLabel(cfg.enabled ? '🔴 Spegni' : '🟢 Accendi')
+    .setStyle(cfg.enabled ? ButtonStyle.Danger : ButtonStyle.Success);
+
+  const reset = new ButtonBuilder()
+    .setCustomId('verification:reset')
+    .setLabel('♻️ Ripristina')
+    .setStyle(ButtonStyle.Secondary);
+
+  const messageBtn = new ButtonBuilder()
+    .setCustomId('verification:message')
+    .setLabel('📝 Messaggio')
+    .setStyle(ButtonStyle.Primary);
+
+  const preview = new ButtonBuilder()
+    .setCustomId('verification:preview')
+    .setLabel('👀 Anteprima')
+    .setStyle(ButtonStyle.Secondary);
+
+  return new ActionRowBuilder().addComponents(onOff, reset, messageBtn, preview);
 }
 
-function buildPreviewEmbed(cfg, interaction) {
-  const embed = new EmbedBuilder()
-    .setColor(cfg.enabled ? 0x00ff88 : 0xff5555)
-    .setTitle(cfg.title || 'Verification')
-    .setDescription(cfg.description || 'Press the button to verify and receive the role.')
-    .addFields(
-      { name: 'Stato', value: cfg.enabled ? 'Attivo' : 'Disattivo', inline: true },
-      { name: 'Canale', value: cfg.channelId ? `<#${cfg.channelId}>` : 'Nessuno', inline: true },
-      { name: 'Ruolo', value: cfg.roleId ? `<@&${cfg.roleId}>` : 'Nessuno', inline: true },
-      { name: 'Log', value: cfg.logChannelId ? `<#${cfg.logChannelId}>` : 'Nessuno', inline: true },
-      { name: 'Bottone', value: `${cfg.buttonLabel} (${cfg.buttonStyle})`, inline: true },
-    )
-    .setTimestamp();
-
-  const styleMap = { Primary: ButtonStyle.Primary, Secondary: ButtonStyle.Secondary, Success: ButtonStyle.Success, Danger: ButtonStyle.Danger };
-  const btn = new ButtonBuilder().setCustomId('verification:dummy_button').setLabel(cfg.buttonLabel || 'Verify').setStyle(styleMap[cfg.buttonStyle] ?? ButtonStyle.Success).setDisabled(true);
-  const row = new ActionRowBuilder().addComponents(btn);
-  return { embed, row };
-}
-
-function buildDashboard(interaction, section = 'settings') {
+async function buildDashboard(interaction) {
   const config = ensureGuildConfig(interaction);
   const cfg = config.verification;
 
-  const topSelect = buildModuleSelect(section);
+  const embed = buildVerificationEmbed(interaction, cfg);
+  const rows = [
+    buildChannelSelect(interaction, cfg),
+    buildRoleSelect(interaction, cfg),
+    buildControlButtons(cfg),
+  ];
 
-  let rows = [topSelect];
-  if (section === 'settings') rows = rows.concat(buildSettingsRows(cfg, interaction));
-  if (section === 'content') rows = rows.concat(buildContentRows(cfg));
-
-  const { embed, row } = buildPreviewEmbed(cfg, interaction);
-  const components = [...rows, row];
-
-  return { embeds: [embed], components };
+  return { embeds: [embed], components: rows, ephemeral: true };
 }
 
-async function updateDashboard(interaction, section) {
-  try {
-    const payload = buildDashboard(interaction, section);
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(payload).catch(() => {});
-    } else {
-      await interaction.reply({ ...payload, ephemeral: true }).catch(() => {});
-    }
-  } catch (err) {
-    console.error('[Verification] updateDashboard error:', err);
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: '❌ Errore durante aggiornamento dashboard.', ephemeral: true }).catch(() => {});
-    } else {
-      await interaction.reply({ content: '❌ Errore durante aggiornamento dashboard.', ephemeral: true }).catch(() => {});
-    }
+async function updateDashboard(interaction, where = 'edit') {
+  const data = await buildDashboard(interaction);
+  if (interaction.deferred || interaction.replied) {
+    return interaction.editReply(data).catch(() => {});
   }
+  if (where === 'followup') return interaction.followUp(data).catch(() => {});
+  return interaction.reply(data).catch(() => {});
 }
 
-function nextStyle(current) {
-  const order = ['Primary', 'Secondary', 'Success', 'Danger'];
-  const idx = Math.max(0, order.indexOf(current));
-  return order[(idx + 1) % order.length];
-}
-
-async function openModal(interaction, id, title, label, value, style = TextInputStyle.Short) {
-  const modal = new ModalBuilder().setCustomId(id).setTitle(title);
-  const input = new TextInputBuilder().setCustomId('v_input').setLabel(label).setStyle(style).setRequired(true).setValue(value ?? '');
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-  await interaction.showModal(modal);
-}
-
+// Handlers
 async function handleVerification(interaction) {
-  const config = ensureGuildConfig(interaction);
-  const cfg = config.verification;
-  const section = 'settings';
-  const payload = buildDashboard(interaction, section);
-  if (interaction.deferred || interaction.replied) return interaction.editReply({ ...payload, ephemeral: true });
-  return interaction.reply({ ...payload, ephemeral: true });
+  const data = await buildDashboard(interaction);
+  if (interaction.deferred || interaction.replied) {
+    return interaction.editReply(data).catch(() => {});
+  }
+  return interaction.reply(data).catch(() => {});
 }
 
 async function handleSelect(interaction, customId, values) {
   const config = ensureGuildConfig(interaction);
   const cfg = config.verification;
 
-  if (customId === 'verification:module') {
-    const section = values?.[0] || 'settings';
-    return updateDashboard(interaction, section);
+  if (customId === 'verification:select_channel') {
+    const channelId = values?.[0];
+    cfg.channelId = channelId && channelId !== 'none' ? channelId : null;
   }
+  if (customId === 'verification:select_role') {
+    const roleId = values?.[0];
+    cfg.roleId = roleId && roleId !== 'none' ? roleId : null;
+  }
+  return updateDashboard(interaction, 'edit');
+}
 
-  if (customId === 'verification:enabled') {
-    const v = values?.[0] === 'on';
-    cfg.enabled = v;
-    return updateDashboard(interaction, 'settings');
-  }
+async function openMessageModal(interaction, field) {
+  const modal = new ModalBuilder()
+    .setCustomId(`verification:modal_${field}`)
+    .setTitle('📝 Imposta contenuto');
 
-  if (customId === 'verification:channel') {
-    const v = values?.[0];
-    cfg.channelId = v && v !== 'none' ? v : null;
-    return updateDashboard(interaction, 'settings');
-  }
+  const text = new TextInputBuilder()
+    .setCustomId('v_input')
+    .setLabel(field === 'title' ? 'Titolo' : field === 'description' ? 'Messaggio' : field === 'image' ? 'URL Immagine' : 'Footer')
+    .setPlaceholder(field === 'image' ? 'https://...' : 'Testo...')
+    .setStyle(field === 'description' ? TextInputStyle.Paragraph : TextInputStyle.Short)
+    .setRequired(false);
 
-  if (customId === 'verification:role') {
-    const v = values?.[0];
-    cfg.roleId = v && v !== 'none' ? v : null;
-    return updateDashboard(interaction, 'settings');
-  }
-
-  if (customId === 'verification:logchannel') {
-    const v = values?.[0];
-    cfg.logChannelId = v && v !== 'none' ? v : null;
-    return updateDashboard(interaction, 'settings');
-  }
+  modal.addComponents(new ActionRowBuilder().addComponents(text));
+  await interaction.showModal(modal).catch(() => {});
 }
 
 async function handleButton(interaction, customId) {
   const config = ensureGuildConfig(interaction);
   const cfg = config.verification;
 
-  if (customId === 'verification:edit_title') {
-    return openModal(interaction, 'verification:modal_title', 'Modifica Titolo', 'Titolo', cfg.title ?? '');
+  if (customId === 'verification:toggle') {
+    cfg.enabled = !cfg.enabled;
+    return updateDashboard(interaction, 'edit');
   }
-  if (customId === 'verification:edit_description') {
-    return openModal(interaction, 'verification:modal_description', 'Modifica Descrizione', 'Descrizione', cfg.description ?? '', TextInputStyle.Paragraph);
+  if (customId === 'verification:reset') {
+    Object.assign(cfg, {
+      enabled: false,
+      channelId: null,
+      roleId: null,
+      logChannelId: null,
+      messageId: null,
+      buttonLabel: '✅ Verifica',
+      buttonStyle: 'Success',
+      title: '🔐 Verifica',
+      description: 'Premi il bottone per verificarti e ricevere il ruolo.',
+      image: null,
+      footer: null,
+    });
+    return updateDashboard(interaction, 'edit');
   }
-  if (customId === 'verification:edit_button_label') {
-    return openModal(interaction, 'verification:modal_button_label', 'Modifica Testo Bottone', 'Testo', cfg.buttonLabel ?? 'Verify');
+  if (customId === 'verification:message') {
+    // Open a mini "menu" using ephemeral update with four quick buttons for Title, Message, Image, Footer
+    const bar = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('verification:set_title').setLabel('🏷️ Titolo').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('verification:set_description').setLabel('💬 Messaggio').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('verification:set_image').setLabel('🖼️ Immagine').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('verification:set_footer').setLabel('🧾 Footer').setStyle(ButtonStyle.Secondary),
+    );
+
+    const previewEmbed = buildVerificationEmbed(interaction, cfg);
+    const payload = { embeds: [previewEmbed], components: [buildChannelSelect(interaction, cfg), buildRoleSelect(interaction, cfg), bar, buildControlButtons(cfg)], ephemeral: true };
+
+    if (interaction.deferred || interaction.replied) return interaction.editReply(payload).catch(() => {});
+    return interaction.reply(payload).catch(() => {});
   }
-  if (customId === 'verification:cycle_button_style') {
-    cfg.buttonStyle = nextStyle(cfg.buttonStyle || 'Success');
-    return updateDashboard(interaction, 'content');
+  if (customId === 'verification:preview') {
+    // Send a temporary preview as ephemeral follow-up
+    const channel = cfg.channelId ? interaction.guild.channels.cache.get(cfg.channelId) : null;
+    const embed = buildVerificationEmbed(interaction, cfg);
+
+    // If a target channel exists and bot has perms, send a simulated preview there, else just in ephemeral
+    if (channel && hasBotPermsInChannel(channel)) {
+      await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('noop').setLabel(cfg.buttonLabel || '✅ Verifica').setStyle(ButtonStyle.Success).setDisabled(true))] }).catch(() => {});
+    }
+    return updateDashboard(interaction, 'followup');
   }
+  if (customId === 'verification:set_title') return openMessageModal(interaction, 'title');
+  if (customId === 'verification:set_description') return openMessageModal(interaction, 'description');
+  if (customId === 'verification:set_image') return openMessageModal(interaction, 'image');
+  if (customId === 'verification:set_footer') return openMessageModal(interaction, 'footer');
 }
 
 async function handleModal(interaction, customId) {
@@ -268,8 +268,13 @@ async function handleModal(interaction, customId) {
     cfg.description = String(value).slice(0, 4000);
     return updateDashboard(interaction, 'content');
   }
-  if (customId === 'verification:modal_button_label') {
-    cfg.buttonLabel = String(value).slice(0, 80);
+  if (customId === 'verification:modal_image') {
+    const url = String(value || '').trim();
+    cfg.image = url || null;
+    return updateDashboard(interaction, 'content');
+  }
+  if (customId === 'verification:modal_footer') {
+    cfg.footer = String(value || '').slice(0, 2048) || null;
     return updateDashboard(interaction, 'content');
   }
 }
