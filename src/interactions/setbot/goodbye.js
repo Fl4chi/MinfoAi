@@ -1,12 +1,9 @@
-// Dashboard Goodbye Embed Customization — ensure every interaction is acknowledged and errors handled robustly
+// Dashboard Goodbye Embed Customization
 const db = require('../../database/db');
 const {
   EmbedBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   ChannelType,
 } = require('discord.js');
 
@@ -33,158 +30,125 @@ function ensureConfig(interaction) {
     };
     interaction.client.guildConfigs?.set?.(interaction.guildId, cfg);
   }
-  // Initialize all properties with defaults to avoid undefined
+  // Initialize all properties with defaults
   cfg.goodbyeEnabled = cfg.goodbyeEnabled ?? false;
   cfg.goodbyeChannelId = cfg.goodbyeChannelId ?? null;
   cfg.goodbyeMessage = cfg.goodbyeMessage ?? 'Addio {user}!';
   return cfg;
 }
 
-function buildDashboard(interaction) {
-  const cfg = ensureConfig(interaction);
-  const chOptions = getTextChannels(interaction);
-  
+function buildEmbed(cfg, interaction) {
   const embed = new EmbedBuilder()
-    .setTitle('⚙️ Dashboard Goodbye')
-    .setColor(cfg.goodbyeEnabled ? 0x00ff00 : 0xff0000)
-    .setDescription(
-      `**Status:** ${cfg.goodbyeEnabled ? '✅ Attivo' : '❌ Disattivo'}\n` +
-        `**Canale:** ${cfg.goodbyeChannelId ? `<#${cfg.goodbyeChannelId}>` : 'Nessuno'}\n` +
-        `**Messaggio:**\n\`\`\`${cfg.goodbyeMessage || 'Nessuno'}\`\`\`\n` +
-        `*Variabili disponibili:* \`{user}\`, \`{server}\`, \`{memberCount}\``
-    )
+    .setTitle('⚙️ Configurazione Goodbye')
+    .setColor(cfg.goodbyeEnabled ? 0x00ff00 : 0xff6b6b)
     .setTimestamp()
-    .setFooter({ text: 'Dashboard aggiornata' });
+    .setFooter({ text: `Configurato da ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
 
-  const rows = [];
-  
-  // Only add channel select menu if channels are available
-  if (chOptions.length > 0) {
-    const channelMenu = new StringSelectMenuBuilder()
-      .setCustomId('goodbye_channel_select')
-      .setPlaceholder('Seleziona canale goodbye')
-      .addOptions(chOptions);
-    rows.push(new ActionRowBuilder().addComponents(channelMenu));
-  }
-  
-  return { embed, rows };
-}
+  const statusEmoji = cfg.goodbyeEnabled ? '✅' : '❌';
+  const statusText = cfg.goodbyeEnabled ? 'Attivo' : 'Disattivo';
+  const channelText = cfg.goodbyeChannelId ? `<#${cfg.goodbyeChannelId}>` : 'Nessuno';
+  const messagePreview = cfg.goodbyeMessage || 'Addio {user}!';
 
-async function persistAndRefresh(interaction, partialUpdate) {
-  try {
-    // Update DB
-    await db.updateGuildConfig(interaction.guildId, partialUpdate);
-    
-    // Refresh cache
-    const freshCfg = await db.getGuildConfig(interaction.guildId);
-    if (freshCfg && interaction.client.guildConfigs?.set) {
-      interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
-    }
-    
-    // Build and send updated dashboard
-    const { embed, rows } = buildDashboard(interaction);
-    
-    if (!interaction.replied && !interaction.deferred) {
-      return interaction.reply({ embeds: [embed], components: rows, ephemeral: true });
-    } else {
-      return interaction.editReply({ embeds: [embed], components: rows });
-    }
-  } catch (error) {
-    console.error('[goodbye] Error in persistAndRefresh:', error);
-    const errorMsg = { content: "❌ Errore durante l'aggiornamento.", embeds: [], components: [] };
-    
-    if (!interaction.replied && !interaction.deferred) {
-      return interaction.reply({ ...errorMsg, ephemeral: true }).catch(() => {});
-    } else {
-      return interaction.editReply(errorMsg).catch(() => {});
-    }
-  }
-}
+  embed.setDescription(
+    `**Stato:** ${statusEmoji} ${statusText}\n` +
+    `**Canale:** ${channelText}\n` +
+    `**Messaggio:** ${messagePreview}\n\n` +
+    `Usa il menu qui sotto per selezionare il canale goodbye.`
+  );
 
-async function handleSelect(interaction, channelId) {
-  try {
-    return persistAndRefresh(interaction, { goodbyeChannelId: channelId });
-  } catch (error) {
-    console.error('[goodbye] Error in handleSelect:', error);
-    return interaction.editReply({ content: "❌ Errore durante l'aggiornamento.", embeds: [], components: [] }).catch(() => {});
+  if (cfg.goodbyeEnabled && cfg.goodbyeChannelId) {
+    embed.setImage('https://i.imgur.com/placeholder.png'); // Placeholder
   }
-}
 
-async function handleModals(interaction) {
-  try {
-    const id = interaction.customId;
-    if (id === 'goodbye_message_modal') {
-      const msg = interaction.fields.getTextInputValue('goodbye_msg_input');
-      return persistAndRefresh(interaction, { goodbyeMessage: msg });
-    }
-  } catch (error) {
-    console.error('[goodbye] Error in handleModals:', error);
-    return interaction.editReply({ content: "❌ Errore durante l'aggiornamento del messaggio.", embeds: [], components: [] }).catch(() => {});
-  }
+  return embed;
 }
 
 module.exports = {
-  async execute(interaction) {
+  async execute(interaction, context) {
     try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
-      const { embed, rows } = buildDashboard(interaction);
-      return interaction.editReply({ embeds: [embed], components: rows });
-    } catch (error) {
-      console.error('[goodbye] Error in execute:', error);
-      if (!interaction.replied && !interaction.deferred) {
-        return interaction.reply({ content: "❌ Errore nell'esecuzione.", ephemeral: true }).catch(() => {});
-      }
-      return interaction.editReply({ content: "❌ Errore nell'esecuzione." }).catch(() => {});
-    }
-  },
+      const cfg = ensureConfig(interaction);
 
-  async handleGoodbye(interaction) {
-    return this.execute(interaction);
-  },
+      if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'goodbye_channel_select') {
+          const channelId = interaction.values[0];
+          if (channelId === 'disable') {
+            cfg.goodbyeEnabled = false;
+            cfg.goodbyeChannelId = null;
+            await db.run(
+              'UPDATE guild_config SET goodbyeEnabled = ?, goodbyeChannelId = ? WHERE guildId = ?',
+              [0, null, interaction.guildId]
+            );
+            interaction.client.guildConfigs?.set(interaction.guildId, cfg);
+            const embed = buildEmbed(cfg, interaction);
+            const row = new ActionRowBuilder().addComponents(
+              new StringSelectMenuBuilder()
+                .setCustomId('goodbye_channel_select')
+                .setPlaceholder('Seleziona canale goodbye')
+                .addOptions(
+                  { label: '🚫 Disabilita Goodbye', value: 'disable' },
+                  ...getTextChannels(interaction)
+                )
+            );
+            await interaction.update({ embeds: [embed], components: [row] });
+            return;
+          }
 
-  async onComponent(interaction) {
-    try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferUpdate();
-      }
-      
-      const id = interaction.customId;
-      
-      // Handle channel selection
-      if (id === 'goodbye_channel_select') {
-        const v = interaction.values?.[0];
-        if (v === undefined) {
-          return interaction.editReply({ content: '❌ Nessun canale selezionato.' }).catch(() => {});
+          const channel = interaction.guild.channels.cache.get(channelId);
+          if (!channel) {
+            await interaction.reply({ content: '❌ Canale non trovato.', ephemeral: true });
+            return;
+          }
+
+          cfg.goodbyeEnabled = true;
+          cfg.goodbyeChannelId = channelId;
+          await db.run(
+            'UPDATE guild_config SET goodbyeEnabled = ?, goodbyeChannelId = ? WHERE guildId = ?',
+            [1, channelId, interaction.guildId]
+          );
+          interaction.client.guildConfigs?.set(interaction.guildId, cfg);
+
+          const embed = buildEmbed(cfg, interaction);
+          const row = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId('goodbye_channel_select')
+              .setPlaceholder('Seleziona canale goodbye')
+              .addOptions(
+                { label: '🚫 Disabilita Goodbye', value: 'disable' },
+                ...getTextChannels(interaction)
+              )
+          );
+          await interaction.update({ embeds: [embed], components: [row] });
+          return;
         }
-        return handleSelect(interaction, v);
       }
-    } catch (error) {
-      console.error('[goodbye] Error in onComponent:', error);
-      if (!interaction.replied && !interaction.deferred) {
-        return interaction.reply({ content: "❌ Errore nell'interazione.", ephemeral: true }).catch(() => {});
-      }
-      return interaction.editReply({ content: "❌ Errore nell'interazione." }).catch(() => {});
-    }
-  },
 
-  async onModal(interaction) {
-    try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
+      // Initial render
+      const embed = buildEmbed(cfg, interaction);
+      const channels = getTextChannels(interaction);
+      if (channels.length === 0) {
+        await interaction.reply({ content: '❌ Nessun canale testuale trovato.', ephemeral: true });
+        return;
       }
-      return handleModals(interaction);
-    } catch (error) {
-      console.error('[goodbye] Error in onModal:', error);
-      if (!interaction.replied && !interaction.deferred) {
-        return interaction.reply({ content: '❌ Errore nella gestione del modal.', ephemeral: true }).catch(() => {});
-      }
-      return interaction.editReply({ content: '❌ Errore nella gestione del modal.' }).catch(() => {});
-    }
-  },
 
-  async showPanel(interaction, config) {
-    return this.execute(interaction);
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('goodbye_channel_select')
+          .setPlaceholder('Seleziona canale goodbye')
+          .addOptions(
+            { label: '🚫 Disabilita Goodbye', value: 'disable' },
+            ...channels
+          )
+      );
+
+      await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    } catch (error) {
+      console.error('[goodbye] Fatal error:', error);
+      const errorMsg = '❌ Errore durante la configurazione del goodbye.';
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: errorMsg, ephemeral: true }).catch(() => {});
+      } else {
+        await interaction.reply({ content: errorMsg, ephemeral: true }).catch(() => {});
+      }
+    }
   },
 };
