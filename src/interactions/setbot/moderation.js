@@ -1,14 +1,11 @@
 // Dashboard Moderazione - Pattern reattivo centralizzato (ref: welcome.js, goodbye.js)
 // Refactored: 2025-10-13 - Dashboard completamente reattiva con select moduli
 // Pattern: buildDashboard centralizzato, updateDashboard, gestione undefined/errori, no doppie risposte
-
 const db = require('../../database/db');
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require('discord.js');
-
 // ═══════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════
-
 function getTextChannels(interaction) {
   try {
     return interaction.guild.channels.cache
@@ -20,8 +17,9 @@ function getTextChannels(interaction) {
     return [];
   }
 }
-
 function ensureConfig(interaction) {
+  // Ensure in-memory map exists
+  if (!interaction.client.guildConfigs) interaction.client.guildConfigs = new Map();
   let cfg = interaction.client.guildConfigs.get(interaction.guildId);
   if (!cfg) {
     cfg = {
@@ -38,16 +36,13 @@ function ensureConfig(interaction) {
   if (cfg.moderationAutomodEnabled === undefined) cfg.moderationAutomodEnabled = false;
   return cfg;
 }
-
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD CENTRALIZZATO - Pattern come welcome/goodbye
 // ═══════════════════════════════════════════════════════════════
-
 function buildDashboard(interaction) {
   try {
     const cfg = ensureConfig(interaction);
     const channels = getTextChannels(interaction);
-
     // Embed con tutte le variabili mostrate subito
     const embed = new EmbedBuilder()
       .setTitle('⚙️ Dashboard Moderazione')
@@ -59,7 +54,6 @@ function buildDashboard(interaction) {
       )
       .setFooter({ text: 'Usa il menu per modificare le impostazioni' })
       .setTimestamp();
-
     // Solo select menu dei moduli (niente bottoni extra)
     const options = [
       {
@@ -75,7 +69,6 @@ function buildDashboard(interaction) {
         emoji: '🤖'
       }
     ];
-
     // Aggiungi opzione canale log se ci sono canali
     if (channels.length > 0) {
       options.push({
@@ -85,14 +78,11 @@ function buildDashboard(interaction) {
         emoji: '📝'
       });
     }
-
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId('moderation_config_select')
       .setPlaceholder('Seleziona azione da configurare')
       .addOptions(options);
-
     const row = new ActionRowBuilder().addComponents(selectMenu);
-
     return { embeds: [embed], components: [row] };
   } catch (error) {
     console.error('[moderation] Error building dashboard:', error);
@@ -103,7 +93,6 @@ function buildDashboard(interaction) {
     return { embeds: [errorEmbed], components: [] };
   }
 }
-
 async function updateDashboard(interaction) {
   try {
     const payload = buildDashboard(interaction);
@@ -124,11 +113,9 @@ async function updateDashboard(interaction) {
     }
   }
 }
-
 // ═══════════════════════════════════════════════════════════════
 // GESTIONE SELEZIONE CANALE LOG - Submenu
 // ═══════════════════════════════════════════════════════════════
-
 async function showChannelSelectMenu(interaction) {
   try {
     await interaction.deferUpdate();
@@ -140,36 +127,29 @@ async function showChannelSelectMenu(interaction) {
         components: []
       });
     }
-
     const embed = new EmbedBuilder()
       .setTitle('📝 Seleziona Canale Log')
       .setDescription('Scegli il canale dove verranno inviati i log di moderazione')
       .setColor('#3498db');
-
     const channelMenu = new StringSelectMenuBuilder()
       .setCustomId('moderation_channel_log_select')
       .setPlaceholder('Seleziona canale log')
       .addOptions([{ label: '❌ Nessuno (disabilita log)', value: 'none' }, ...channels]);
-
     const backBtn = new StringSelectMenuBuilder()
       .setCustomId('moderation_config_select')
       .setPlaceholder('← Torna alla dashboard')
       .addOptions([{ label: '← Torna indietro', value: 'back_to_dashboard', emoji: '↩️' }]);
-
     const row1 = new ActionRowBuilder().addComponents(channelMenu);
     const row2 = new ActionRowBuilder().addComponents(backBtn);
-
     return await interaction.editReply({ embeds: [embed], components: [row1, row2] });
   } catch (error) {
     console.error('[moderation] Error showing channel select:', error);
     return updateDashboard(interaction);
   }
 }
-
 // ═══════════════════════════════════════════════════════════════
 // HANDLERS - Aggiornamento live ad ogni azione
 // ═══════════════════════════════════════════════════════════════
-
 async function handleToggleModeration(interaction) {
   try {
     await interaction.deferUpdate();
@@ -182,6 +162,7 @@ async function handleToggleModeration(interaction) {
     // Rebuild config
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
+      if (!interaction.client.guildConfigs) interaction.client.guildConfigs = new Map();
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
     
@@ -194,7 +175,6 @@ async function handleToggleModeration(interaction) {
     }
   }
 }
-
 async function handleToggleAutomod(interaction) {
   try {
     await interaction.deferUpdate();
@@ -207,6 +187,7 @@ async function handleToggleAutomod(interaction) {
     // Rebuild config
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
+      if (!interaction.client.guildConfigs) interaction.client.guildConfigs = new Map();
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
     
@@ -219,7 +200,6 @@ async function handleToggleAutomod(interaction) {
     }
   }
 }
-
 async function handleChannelLogSelect(interaction) {
   try {
     await interaction.deferUpdate();
@@ -233,6 +213,7 @@ async function handleChannelLogSelect(interaction) {
     // Rebuild config
     const freshCfg = await db.getGuildConfig(interaction.guildId);
     if (freshCfg) {
+      if (!interaction.client.guildConfigs) interaction.client.guildConfigs = new Map();
       interaction.client.guildConfigs.set(interaction.guildId, freshCfg);
     }
     
@@ -245,11 +226,9 @@ async function handleChannelLogSelect(interaction) {
     }
   }
 }
-
 // ═══════════════════════════════════════════════════════════════
 // EXPORTS - Router componenti
 // ═══════════════════════════════════════════════════════════════
-
 module.exports = {
   // Entrypoint principale
   async execute(interaction) {
@@ -257,7 +236,6 @@ module.exports = {
     if (typeof this.handleModeration === 'function') return this.handleModeration(interaction);
     return interaction.reply({ content: '❌ Dashboard modulo non implementata correttamente!', ephemeral: true });
   },
-
   // Mostra dashboard principale
   async handleModeration(interaction) {
     try {
@@ -273,7 +251,6 @@ module.exports = {
       }
     }
   },
-
   // Router per select menu e componenti
   async onComponent(interaction) {
     try {
@@ -313,7 +290,6 @@ module.exports = {
       }
     }
   },
-
   // Router modals (non usato per ora)
   async onModal(interaction) {
     try {
@@ -322,7 +298,6 @@ module.exports = {
       console.error('[moderation] Error in onModal:', error);
     }
   },
-
   // Alias per compatibilità con setbot.js
   async showPanel(interaction) {
     return this.handleModeration(interaction);
