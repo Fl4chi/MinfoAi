@@ -1,13 +1,12 @@
-const {
-  EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder,
-  ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField
-} = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 
+// Ensure the guildConfigs map exists on the client
 function initializeGuildConfigs(client) {
   if (!client) throw new Error('Client object is required');
   if (!client.guildConfigs) client.guildConfigs = new Map();
 }
 
+// Ensure a per-guild config object exists and has required sections
 function ensureGuildConfig(interaction) {
   if (!interaction || !interaction.client || !interaction.guild)
     throw new Error('Invalid interaction, client, or guild');
@@ -80,13 +79,15 @@ async function handleCategorySelect(interaction) {
   const category = interaction.values?.[0];
   config.selected = category;
   if (category === 'verification') {
-    return interaction.reply(buildVerificationDashboard(interaction, config));
+    return interaction.reply({ ...buildVerificationDashboard(interaction, config), ephemeral: true });
   }
+  // For other categories, just ack ephemerally to avoid no response
+  return interaction.reply({ content: 'Categoria selezionata.', ephemeral: true });
 }
 
 async function execute(interaction) {
   if (interaction.isChatInputCommand?.() && interaction.commandName === 'setbot') {
-    return interaction.reply(buildMainDashboard(interaction));
+    return interaction.reply({ ...buildMainDashboard(interaction), ephemeral: true });
   }
   if (interaction.isStringSelectMenu() && interaction.customId === 'setbot:category') {
     return handleCategorySelect(interaction);
