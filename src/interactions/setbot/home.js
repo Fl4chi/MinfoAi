@@ -1,5 +1,4 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require('discord.js');
-
 module.exports = {
     data: {
         name: 'setbot',
@@ -55,7 +54,6 @@ module.exports = {
                 )
                 .setFooter({ text: 'Seleziona un modulo dal menu per iniziare' })
                 .setTimestamp();
-
             // Menu di selezione per navigare tra i moduli
             const moduleMenu = new ActionRowBuilder()
                 .addComponents(
@@ -107,37 +105,16 @@ module.exports = {
                             }
                         ])
                 );
-
-            // Pulsanti rapidi per azioni comuni
-            const quickActions = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('home_quick_welcome')
-                        .setLabel('Setup Veloce Benvenuto')
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji('⚡'),
-                    new ButtonBuilder()
-                        .setCustomId('home_quick_moderation')
-                        .setLabel('Setup Veloce Moderazione')
-                        .setStyle(ButtonStyle.Success)
-                        .setEmoji('🛡️'),
-                    new ButtonBuilder()
-                        .setCustomId('home_help')
-                        .setLabel('Guida')
-                        .setStyle(ButtonStyle.Secondary)
-                        .setEmoji('❓')
-                );
-
             // Invia o aggiorna il messaggio
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply({
                     embeds: [homeEmbed],
-                    components: [moduleMenu, quickActions]
+                    components: [moduleMenu]
                 });
             } else {
                 await interaction.reply({
                     embeds: [homeEmbed],
-                    components: [moduleMenu, quickActions],
+                    components: [moduleMenu],
                     ephemeral: true
                 });
             }
@@ -147,7 +124,6 @@ module.exports = {
                 content: '❌ Si è verificato un errore durante l\'apertura della dashboard.',
                 ephemeral: true
             };
-
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply(errorMessage);
             } else {
@@ -155,7 +131,6 @@ module.exports = {
             }
         }
     },
-
     // Handler per le interazioni del menu
     async handleModuleSelect(interaction) {
         const selectedModule = interaction.values[0];
@@ -168,53 +143,6 @@ module.exports = {
             console.error(`Errore nel caricamento del modulo ${selectedModule}:`, error);
             await interaction.reply({
                 content: `❌ Impossibile caricare il modulo **${selectedModule}**. Riprova più tardi.`,
-                ephemeral: true
-            });
-        }
-    },
-
-    // Handler per i pulsanti rapidi
-    async handleQuickAction(interaction, action) {
-        try {
-            if (action === 'quick_welcome') {
-                const welcomeModule = require('./welcome.js');
-                await welcomeModule.execute(interaction);
-            } else if (action === 'quick_moderation') {
-                const moderationModule = require('./moderation.js');
-                await moderationModule.execute(interaction);
-            } else if (action === 'help') {
-                const helpEmbed = new EmbedBuilder()
-                    .setColor('#5865F2')
-                    .setTitle('📖 Guida MinfoAi Dashboard')
-                    .setDescription(
-                        '**Come utilizzare la dashboard:**\n\n' +
-                        '1️⃣ Seleziona un modulo dal menu a tendina\n' +
-                        '2️⃣ Configura le impostazioni tramite i pulsanti e modal\n' +
-                        '3️⃣ Visualizza l\'anteprima live delle modifiche\n' +
-                        '4️⃣ Salva le configurazioni quando sei soddisfatto\n\n' +
-                        '**Setup Veloce:** Usa i pulsanti rapidi per configurazioni predefinite\n' +
-                        '**Personalizzazione:** Ogni embed supporta colori, immagini, footer e molto altro\n' +
-                        '**Supporto:** Per assistenza, contatta gli amministratori del server'
-                    )
-                    .addFields(
-                        {
-                            name: '💡 Suggerimenti',
-                            value: '• Testa sempre le configurazioni prima di attivarle\n• Usa variabili dinamiche come {user}, {server}, {count}\n• Salva configurazioni multiple e scegli quella preferita',
-                            inline: false
-                        }
-                    )
-                    .setFooter({ text: 'MinfoAi Dashboard - Versione 2.0' })
-                    .setTimestamp();
-
-                await interaction.reply({
-                    embeds: [helpEmbed],
-                    ephemeral: true
-                });
-            }
-        } catch (error) {
-            console.error('Errore nell\'azione rapida:', error);
-            await interaction.reply({
-                content: '❌ Si è verificato un errore durante l\'esecuzione dell\'azione.',
                 ephemeral: true
             });
         }
