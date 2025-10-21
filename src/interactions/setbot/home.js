@@ -5,68 +5,52 @@ module.exports = {
         name: 'setbot',
         description: '🏠 Dashboard principale - Configurazione completa di tutte le funzionalità del bot'
     },
+
     async execute(interaction) {
         try {
-            // Crea l'embed principale della dashboard con struttura modulare
+            // Embed principale della dashboard con UI semplice e chiara
             const homeEmbed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setTitle('🤖 MinfoAi - Dashboard Configurazione')
                 .setDescription(
-                    '**Benvenuto nel pannello di controllo completo di MinfoAi!**\n\n' +
-                    'Un bot Discord all-in-one con moderazione avanzata, AI proprietaria, gamification, musica, giveaway, verifica utenti e automazioni.\n' +
-                    'Seleziona un modulo dal menu per configurare le funzionalità del tuo server.'
+                    "Seleziona una delle funzionalità disponibili per configurare il tuo server Discord. Ogni modulo offre un'ampia personalizzazione per adattarsi alle tue esigenze."
                 )
                 .addFields(
                     {
-                        name: '👋 Welcome & Goodbye',
-                        value: 'Messaggi personalizzati di benvenuto e addio con embed, immagini dinamiche, banner e placeholder avanzati.',
+                        name: '👋 Gestione Benvenuto',
+                        value: 'Imposta messaggi e canali di benvenuto con opzioni semplici e chiare.',
+                        inline: true
+                    },
+                    {
+                        name: '👋 Gestione Goodbye',
+                        value: 'Configura messaggi di addio essenziali per chi lascia il server.',
                         inline: true
                     },
                     {
                         name: '🛡️ Moderazione',
-                        value: 'Sistema completo: ban, kick, mute, timeout, warn, automod (anti-spam, anti-link, filtri), case system e log.',
+                        value: 'Regole base, automod essenziale e azioni rapide per mantenere l’ordine.',
                         inline: true
                     },
                     {
-                        name: '✅ Verifica Utenti',
-                        value: 'Sistema di verifica con captcha, quiz, ruolo verificato, DM onboarding e gestione scadenze automatica.',
-                        inline: true
-                    },
-                    {
-                        name: '🏆 XP & Leveling',
-                        value: 'Sistema gamification con XP per messaggi/voice, livelli, leaderboard paginata, premi ruolo automatici.',
-                        inline: true
-                    },
-                    {
-                        name: '🎉 Giveaway',
-                        value: 'Creazione giveaway con durata, vincitori multipli, requisiti ruolo, reroll, annunci automatici e storico.',
+                        name: '✅ Verifica',
+                        value: 'Abilita una semplice verifica utenti con ruolo dedicato.',
                         inline: true
                     },
                     {
                         name: '🎵 Musica',
-                        value: 'Player avanzato: play/queue/skip/loop, supporto YouTube/Spotify, filtri audio, playlist server salvate.',
+                        value: 'Player facile: play, pausa, skip e gestione coda.',
                         inline: true
                     },
                     {
-                        name: '🤖 Moduli AI',
-                        value: 'AI avanzata: /ask, /summarize, /translate, /image, /tts con OpenAI, ElevenLabs e moderazione assistita.',
-                        inline: true
-                    },
-                    {
-                        name: '⚙️ Automazioni',
-                        value: 'Ruoli auto su join, messaggi ricorrenti (scheduler), backup/esportazione config, azioni automatizzate.',
-                        inline: true
-                    },
-                    {
-                        name: '📊 Info & Utility',
-                        value: 'Comandi info (server, user, role, bot), poll, reminders, afk, role menus, reaction roles e utilità varie.',
+                        name: '🏆 Gamification',
+                        value: 'XP, livelli e premi base per coinvolgere la community.',
                         inline: true
                     }
                 )
-                .setFooter({ text: '💡 Seleziona un modulo dal menu sottostante per iniziare la configurazione' })
+                .setFooter({ text: '💡 Usa il menu sottostante per scegliere il modulo da configurare' })
                 .setTimestamp();
 
-            // Menu di selezione modulare per navigare tra tutte le funzionalità
+            // Menu di selezione modulare (lasciato invariato per semplicità di navigazione)
             const moduleMenu = new ActionRowBuilder()
                 .addComponents(
                     new StringSelectMenuBuilder()
@@ -74,58 +58,40 @@ module.exports = {
                         .setPlaceholder('📋 Scegli il modulo da configurare')
                         .addOptions([
                             {
-                                label: '👋 Welcome & Goodbye',
-                                description: 'Messaggi di benvenuto e addio personalizzati',
+                                label: '👋 Gestione Benvenuto',
+                                description: 'Configura il benvenuto',
                                 value: 'welcome',
                                 emoji: '👋'
                             },
                             {
-                                label: '🛡️ Sistema Moderazione',
-                                description: 'Automod, ban, warn, filtri e log avanzati',
+                                label: '👋 Gestione Goodbye',
+                                description: 'Configura i messaggi di addio',
+                                value: 'goodbye',
+                                emoji: '👋'
+                            },
+                            {
+                                label: '🛡️ Moderazione',
+                                description: 'Automod e azioni rapide',
                                 value: 'moderation',
                                 emoji: '🛡️'
                             },
                             {
-                                label: '✅ Verifica Utenti',
-                                description: 'Captcha, ruoli verificati e onboarding',
+                                label: '✅ Verifica',
+                                description: 'Verifica utenti semplice',
                                 value: 'verification',
                                 emoji: '✅'
                             },
                             {
-                                label: '🏆 XP & Gamification',
-                                description: 'Livelli, XP, leaderboard e premi automatici',
-                                value: 'gamification',
-                                emoji: '🏆'
-                            },
-                            {
-                                label: '🎉 Giveaway',
-                                description: 'Crea e gestisci giveaway con requisiti',
-                                value: 'giveaway',
-                                emoji: '🎉'
-                            },
-                            {
-                                label: '🎵 Player Musica',
-                                description: 'YouTube, Spotify, playlist e controlli audio',
+                                label: '🎵 Musica',
+                                description: 'Player e coda',
                                 value: 'music',
                                 emoji: '🎵'
                             },
                             {
-                                label: '🤖 Moduli AI',
-                                description: 'Ask, summarize, translate, image, tts',
-                                value: 'ai',
-                                emoji: '🤖'
-                            },
-                            {
-                                label: '⚙️ Automazioni',
-                                description: 'Ruoli auto, messaggi ricorrenti, backup',
-                                value: 'automations',
-                                emoji: '⚙️'
-                            },
-                            {
-                                label: '📊 Info & Utility',
-                                description: 'Comandi info, poll, reminders, role menus',
-                                value: 'info',
-                                emoji: '📊'
+                                label: '🏆 Gamification',
+                                description: 'XP e livelli',
+                                value: 'gamification',
+                                emoji: '🏆'
                             }
                         ])
                 );
@@ -149,7 +115,7 @@ module.exports = {
                 content: '❌ Si è verificato un errore durante l\'apertura della dashboard. Riprova più tardi.',
                 ephemeral: true
             };
-            
+
             if (interaction.replied || interaction.deferred) {
                 await interaction.editReply(errorMessage);
             } else {
@@ -157,11 +123,11 @@ module.exports = {
             }
         }
     },
-    
+
     // Handler per le interazioni del select menu
     async handleModuleSelect(interaction) {
         const selectedModule = interaction.values[0];
-        
+
         // Carica dinamicamente il modulo selezionato
         try {
             const module = require(`./${selectedModule}.js`);
