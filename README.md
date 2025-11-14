@@ -1,202 +1,421 @@
-# MinfoAi
+# MinfoAi - Advanced Discord Bot
 
-Un bot Discord completo, semplice da configurare e pronto all’uso. MinfoAi offre moderazione avanzata, livelli/XP, welcome/goodbye con anteprime, gestione permessi, info server, giveaway, musica, verifica utenti, automazioni, moduli AI, e una UI in‑chat (Setbot) per configurare tutto senza dashboard esterne.
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Node.js](https://img.shields.io/badge/node.js-18+-green)
+![License](https://img.shields.io/badge/license-MIT-brightgreen)
+
+## 📋 Overview
+
+MinfoAi is a comprehensive and feature-rich Discord bot designed to provide advanced moderation, AI-powered conversations, user management, and server partnerships. The latest version (2.0) includes a complete database restructuring with MongoDB, an integrated AI system using LangChain, and a sophisticated partnership framework.
+
+### Key Features
+
+✅ **Advanced Moderation**: Complete moderation suite with logging, warnings, and automatic actions
+✅ **AI-Powered Chat**: Intelligent conversations using LangChain with memory and sentiment analysis
+✅ **User Database**: Comprehensive MongoDB schema storing user stats, interactions, and preferences
+✅ **Gamification**: Experience points (XP), leveling system, achievements, and badges
+✅ **Partnership System**: Multi-tier partnership framework with trust scores and ban list sharing
+✅ **Event Management**: Welcome/goodbye messages, event tracking, and statistics
+✅ **Music Commands**: Integrated music playback and queue management
+✅ **Customization**: Per-server configuration and user preferences
+✅ **Open-Source AI**: Uses open-source AI models (HuggingFace) with optional OpenAI fallback
 
 ---
 
-## ✨ Panoramica
-- Obiettivo: fornire un assistente all‑in‑one con comandi chiari e una “dashboard” in‑chat che consente a chiunque di impostare il bot in pochi clic.
-- Punti di forza: semplicità, sicurezza, performance, UX pulita e messaggi in Embed coerenti.
-- Architettura: bot Discord.js + moduli modulari, persistenza configurazioni su file/DB, job scheduler, handler eventi/command, supporto cog-based (struttura a moduli caricabili).
+## 🚀 Quick Start
 
----
+### Prerequisites
 
-## 📦 Requisiti
-- Node.js 18+ (consigliato LTS)
-- NPM o PNPM
-- Un bot Discord con token e privilegi di intent adeguati (SERVER MEMBERS, MESSAGE CONTENT se richiesto dai moduli)
-- Opzionale: chiavi API per moduli AI/Musica (es. OpenAI, ElevenLabs, YouTube/Spotify), provider immagini (Unsplash) e servizi antispam
+- Node.js 18+
+- npm or yarn
+- MongoDB 5.0+ (local or MongoDB Atlas)
+- Discord Bot Token
+- Discord Server (for testing)
 
----
+### Installation
 
-## 🚀 Setup rapido
-1) Clona il repo
-```
-git clone https://github.com/Fl4chi/MinfoAi
+For detailed installation and setup instructions, see [INSTALLATION.md](./INSTALLATION.md)
+
+#### Quick Setup:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Fl4chi/MinfoAi.git
 cd MinfoAi
-```
-2) Installa le dipendenze
-```
+
+# 2. Install dependencies
 npm install
+
+# 3. Configure environment variables
+cp .env.example .env
+# Edit .env with your credentials
+
+# 4. Start the bot
+npm start
 ```
-3) Configura l’ambiente
-- Copia .env.example in .env e compila:
+
+---
+
+## 📦 Project Structure
+
 ```
-DISCORD_TOKEN=...
-CLIENT_ID=...
-GUILD_ID=...(opzionale per comandi guild)
-DATABASE_URL=...(se usi DB)
-OPENAI_API_KEY=...(se usi moduli AI)
-YOUTUBE_API_KEY=...(modulo musica)
+MinfoAi/
+├── src/
+│   ├── index.js                 # Main bot entry point
+│   ├── commands/                # Command files
+│   ├── events/                  # Event handlers
+│   ├── database/
+│   │   ├── userSchema.js        # MongoDB user schema with comprehensive fields
+│   │   ├── aiHandler.js         # LangChain AI integration
+│   │   ├── dbConnection.js      # MongoDB connection management
+│   │   └── partnershipSchema.js # Partnership data structure
+│   ├── handlers/
+│   │   └── partnershipHandler.js # Partnership system logic
+│   └── utils/                   # Utility functions
+├── INSTALLATION.md              # Detailed setup guide
+├── PARTNERSHIP_GUIDE.md         # Partnership system documentation
+├── .env.updated                 # Updated environment variables
+├── .env.example                 # Environment template
+├── package.json                 # Dependencies
+└── README.md                    # This file
 ```
-4) Avvia in sviluppo
+
+---
+
+## 🗄️ Database (MongoDB)
+
+The bot now features a comprehensive MongoDB schema for storing user data:
+
+### User Schema Fields
+
+```javascript
+{
+  userId: String,
+  username: String,
+  discriminator: String,
+  avatar: String,
+  
+  // Gamification
+  xp: Number,
+  level: Number,
+  reputation: Number,
+  badges: [String],
+  achievements: [String],
+  
+  // Moderation
+  warnings: Number,
+  mutes: [{
+    muteId: String,
+    reason: String,
+    duration: Number,
+    timestamp: Date
+  }],
+  bans: [{
+    banId: String,
+    reason: String,
+    timestamp: Date
+  }],
+  
+  // AI Interactions
+  aiInteractions: Number,
+  sentimentScore: Number,
+  conversationHistory: [String],
+  preferences: {
+    language: String,
+    timezone: String,
+    aiEnabled: Boolean
+  },
+  
+  // Activity
+  joinDate: Date,
+  lastActiveDate: Date,
+  messageCount: Number,
+  voteCount: Number,
+  
+  // Transactions
+  transactions: [{
+    type: String,
+    amount: Number,
+    timestamp: Date,
+    description: String
+  }]
+}
 ```
+
+---
+
+## 🤖 AI System (LangChain Integration)
+
+The bot now features an advanced AI system using LangChain:
+
+### Features
+
+- **Open-Source Models**: Primary support for HuggingFace models
+- **Memory Management**: Conversation history and context awareness
+- **Sentiment Analysis**: Automatic tone detection and response adjustment
+- **User Profiling**: AI learns user preferences and communication style
+- **Fallback System**: Optional OpenAI integration for advanced reasoning
+- **Error Handling**: Robust error management and graceful degradation
+
+### Usage
+
+```javascript
+const aiHandler = require('./database/aiHandler');
+
+// Initialize AI
+await aiHandler.initializeAI();
+
+// Generate response
+const response = await aiHandler.generateResponse(userId, userMessage, {
+  context: conversationContext,
+  personality: botPersonality
+});
+```
+
+---
+
+## 🤝 Partnership System
+
+The bot features a comprehensive partnership framework allowing servers to collaborate.
+
+### Partnership Tiers
+
+| Tier | Member Limit | Ban List Sharing | Cross-Server Events | Support |
+|------|-------------|-----------------|-------------------|----------|
+| **Bronze** | Up to 5 | ✓ | ✗ | Community |
+| **Silver** | Up to 20 | ✓ | ✓ | Priority |
+| **Gold** | Up to 50 | ✓ | ✓ | Dedicated |
+| **Platinum** | Unlimited | ✓ | ✓ | 24/7 Support |
+
+### Key Features
+
+- **Ban List Sharing**: Automatically share and sync ban lists between partner servers
+- **Referral System**: Earn rewards by referring other servers
+- **Trust Score**: 0-100 score based on partnership history and rule compliance
+- **Cross-Server Events**: Organize events across multiple partner servers
+- **Violation Reporting**: Automatic detection and handling of partnership violations
+- **Analytics**: Detailed partnership statistics and member insights
+
+For detailed partnership documentation, see [PARTNERSHIP_GUIDE.md](./PARTNERSHIP_GUIDE.md)
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+Create a `.env` file with the following variables:
+
+```env
+# Discord
+DISCORD_TOKEN=your_bot_token_here
+DISCORD_CLIENT_ID=your_client_id
+
+# MongoDB
+MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/minfoai
+MONGO_DB_NAME=minfoai
+
+# AI System
+AI_MODEL_TYPE=huggingface # or openai
+HUGGINGFACE_API_KEY=your_huggingface_key
+OPENAI_API_KEY=your_openai_key (optional)
+
+# Bot Configuration
+BOT_PREFIX=!
+BOT_LANGUAGE=en
+BOT_TIMEZONE=UTC
+
+# Features
+AI_ENABLED=true
+MODERATION_ENABLED=true
+PARTNERSHIP_ENABLED=true
+MUSIC_ENABLED=true
+```
+
+For a complete list of environment variables, see [.env.updated](./.env.updated)
+
+---
+
+## 📖 Commands
+
+### Admin Commands
+
+- `/ban <user> [reason]` - Ban a user from the server
+- `/kick <user> [reason]` - Kick a user from the server
+- `/warn <user> [reason]` - Warn a user
+- `/mute <user> <duration> [reason]` - Mute a user
+- `/unmute <user>` - Unmute a user
+
+### AI Commands
+
+- `/ask <question>` - Ask the AI a question
+- `/chat` - Start a conversation with the AI
+- `/ai-settings` - Configure AI behavior
+
+### Partnership Commands
+
+- `/partnership request` - Request to form a partnership
+- `/partnership view` - View partnership details
+- `/partnership manage` - Manage partnership settings
+- `/partnership stats` - View partnership statistics
+
+### User Commands
+
+- `/profile` - View your user profile
+- `/stats` - View your statistics
+- `/achievements` - View your achievements
+- `/leaderboard` - View server leaderboard
+
+### Music Commands
+
+- `/play <song>` - Play a song
+- `/stop` - Stop playback
+- `/queue` - View music queue
+- `/skip` - Skip current song
+
+---
+
+## 🔧 Development
+
+### Setting Up Development Environment
+
+```bash
+# Install dev dependencies
+npm install --save-dev nodemon
+
+# Start in development mode (with auto-reload)
 npm run dev
+
+# Run tests
+npm test
 ```
-5) Avvia in produzione
+
+### Creating New Commands
+
+```javascript
+module.exports = {
+  name: 'ping',
+  description: 'Ping command',
+  async execute(message, args) {
+    await message.reply('Pong!');
+  }
+};
 ```
-npm run build && npm start
+
+### Creating New Events
+
+```javascript
+module.exports = {
+  name: 'messageCreate',
+  async execute(message, client) {
+    // Handle message event
+  }
+};
 ```
 
 ---
 
-## 🧩 Struttura del progetto (cog-based)
-- src/
-  - index.ts/js: bootstrap client, handler eventi, registrazione comandi
-  - commands/: comandi slash e messaggio, strutturati per modulo
-  - modules/ (cogs): ogni cartella è un modulo caricabile/disattivabile
-    - moderation/
-    - xp/
-    - welcome/
-    - goodbye/
-    - music/
-    - giveaway/
-    - verification/
-    - info/
-    - automations/
-    - ai/
-  - config/: schema, validazione, default
-  - services/: integrazioni esterne (API), storage, scheduler
-  - utils/: helper comuni (embeds, paginazione, permessi)
+## 🧪 Testing
 
-Ogni “cog” esporta:
-- data: metadati (nome, descrizione, permessi richiesti)
-- enable/disable: lifecycle per attivazione
-- commands[]: definizioni e handler
-- events[]: listener dedicati
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Watch mode
+npm run test:watch
+```
 
 ---
 
-## 🔧 Configurazione in‑chat (Setbot)
-- /setbot apri la UI in‑chat con embed, pulsanti e select menu
-- Sezioni configurabili: canali, ruoli, permessi, messaggi template, limiti rate, azioni auto, preferenze moduli
-- Salvataggio immediato con conferma e anteprima messaggi (welcome/goodbye)
+## 📊 Performance & Optimization
+
+### Database Optimization
+
+- Connection pooling with automatic retry logic
+- Indexed queries for fast data retrieval
+- Batch operations for bulk updates
+- Connection health checks
+
+### AI System Optimization
+
+- Model caching for faster inference
+- Conversation memory management
+- Token usage optimization
+- Asynchronous processing with queue management
+
+### Bot Optimization
+
+- Event-driven architecture
+- Efficient command parsing
+- Rate limiting and cooldowns
+- Memory leak prevention
 
 ---
 
-## 🧠 Moduli e funzionalità dettagliate
-1) Welcome & Goodbye
-- Messaggi embedded personalizzabili (testo, immagine, colore, mention, DM opzionali)
-- Image banner dinamico (avatar utente, nome server) se abilitato
-- Log di join/leave in canale staff
+## 🤝 Contributing
 
-2) Moderazione
-- /ban, /kick, /mute, /timeout, /warn, /clear con motivi, durate, prove
-- Automod: anti‑spam, anti‑link, anti‑caps, filtri parole, slowmode mirato
-- Case system: ID caso, log, export CSV/JSON
+Contributions are welcome! Please follow these steps:
 
-3) Verifica utenti
-- Ruolo “Verified”, captcha/quiz, DM onboarding, scadenze
-
-4) XP/Leveling (Gamification)
-- XP per messaggi/voice, antispam XP
-- Premi ruolo automatici per soglie livello
-- Leaderboard con paginazione
-
-5) Giveaway
-- Creazione, durata, numero vincitori, reroll, requisiti (ruolo, presenza)
-- Annunci automatici, DM ai vincitori, storicizzazione
-
-6) Musica
-- Play/queue/skip/stop/loop, supporto YouTube/Spotify links
-- Filtro volume, auto‑leave, salvataggio playlist server
-
-7) Info & Utility
-- /serverinfo, /userinfo, /roleinfo, /botinfo
-- Poll, reminders, afk, role menus, reaction roles
-
-8) Automazioni
-- Ruoli auto su join, saluti automatici, messaggi ricorrenti (scheduler)
-- Backup configurazioni, esportazione/importazione
-
-9) Moduli AI
-- /ask, /summarize, /translate, /image, /tts (in base alle chiavi API)
-- Moderazione contenuti AI‑assistita (classificatori)
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ---
 
-## 🧪 Esempi di utilizzo (Slash commands)
-- /setbot → apre la dashboard in‑chat
-- /welcome set channel:#benvenuto message:"Ciao {user}!" image:"url" color:#00A3FF
-- /goodbye set channel:#arrivederci message:"{user} ha lasciato"
-- /moderation ban @utente reason:"spam"
-- /xp leaderboard
-- /giveaway start duration:1d winners:2 prize:"Nitro"
-- /music play query:"lofi"
-- /ai ask prompt:"Spiega come funziona MinfoAi"
+## 📝 License
 
-Placeholder support comuni:
-- {user} {user_id} {server} {member_count} {channel}
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ---
 
-## 🛠️ Troubleshooting
-- Bot non risponde ai comandi:
-  - Controlla DISCORD_TOKEN e intent nel Developer Portal
-  - Assicurati che i comandi slash siano registrati (log avvio). Se serve, re‑deploy commands.
-- Errori musica:
-  - Verifica YOUTUBE_API_KEY o provider player; problemi regionali possono impedire playback
-- Permessi mancanti:
-  - Il bot deve avere permessi su canali target (Send Messages, Embed Links, Manage Roles se necessario)
-- Timeout/ratelimit:
-  - Riprova o aumenta backoff; verifica antispam interno
+## 🆘 Support
 
-Log e diagnostica:
-- Avvia con DEBUG=1 per log verbosi; usa /debug per stato moduli
+### Documentation
 
----
+- [Installation Guide](./INSTALLATION.md)
+- [Partnership System Guide](./PARTNERSHIP_GUIDE.md)
+- [Deployment Guide](./DEPLOYMENT.md)
 
-## ❓ FAQ
-- Posso usare il bot senza dashboard web?
-  Sì, la dashboard è in‑chat (Setbot). Nessuna pagina esterna richiesta.
-- Posso disattivare moduli?
-  Sì, ogni cog è abilitabile/disabilitabile e caricabile a caldo ove supportato.
-- Supporta più server?
-  Sì, configurazioni per‑guild con fallback globali.
-- Serve Message Content intent?
-  Solo per alcune feature (es. XP per messaggi non‑slash); valutare privacy.
+### Getting Help
+
+- Join our [Discord Support Server](https://discord.gg/your-invite-link)
+- Open an [Issue on GitHub](https://github.com/Fl4chi/MinfoAi/issues)
+- Check [FAQ](./FAQ.md) for common questions
 
 ---
 
-## 🧱 Sicurezza e permessi
-- Principio del minimo privilegio: concedi solo ciò che serve
-- Sanitizzazione input, rate limit per utente/canale, audit dei comandi critici
+## 🎯 Roadmap
+
+- [ ] Voice-based AI integration
+- [ ] Machine learning for user behavior prediction
+- [ ] Advanced analytics dashboard
+- [ ] Mobile app for partnership management
+- [ ] Multi-language support
+- [ ] Integration with more AI providers
+- [ ] Custom command builder
+- [ ] Web-based configuration panel
 
 ---
 
-## 🗂️ Note sulla Dashboard (in‑chat)
-- Navigazione a schede: Welcome, Moderazione, XP, Musica, Giveaway, Verifica, AI, Automazioni, Impostazioni
-- Componenti: Buttons, SelectMenu, Modal per testi lunghi, Preview live
-- Undo/Redo configurazioni recenti, conferme prima di azioni impattanti (es. purge)
+## 👨‍💻 Author
+
+**Fl4chi** - [GitHub Profile](https://github.com/Fl4chi)
 
 ---
 
-## 🧩 Estendibilità
-- Aggiungere un nuovo modulo:
-  1. Crea src/modules/nuovoModulo/
-  2. Esporta data, enable/disable, commands[], events[]
-  3. Registra il cog in src/index e in config
+## 🙏 Acknowledgments
+
+- Discord.js community for the amazing library
+- LangChain team for the AI integration framework
+- MongoDB documentation and community
+- All contributors who have helped improve MinfoAi
 
 ---
 
-## 🏗️ Deployment
-- Guide in DEPLOYMENT.md (PM2/Docker, variabili ambiente, healthcheck)
-- Migrazioni DB con script npm
-
----
-
-## 🤝 Contributi
-- Issue e PR sono benvenuti. Segui il template e la guida di stile.
-
-## 📜 Licenza
-- MIT (o vedi LICENSE se presente)
+**Last Updated**: 2024
+**Status**: Active Development ✨
