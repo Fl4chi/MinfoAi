@@ -1,421 +1,210 @@
-# MinfoAi - Advanced Discord Bot
+# MinfoAi v3.0 - Advanced Discord Bot
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-3.0.0-blue)
 ![Node.js](https://img.shields.io/badge/node.js-18+-green)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 
-## 📋 Overview
+## 🤖 Overview
 
-MinfoAi is a comprehensive and feature-rich Discord bot designed to provide advanced moderation, AI-powered conversations, user management, and server partnerships. The latest version (2.0) includes a complete database restructuring with MongoDB, an integrated AI system using LangChain, and a sophisticated partnership framework.
+MinfoAi v3.0 is a complete rebuild of the Discord bot featuring:
+- **AI Integration**: 100% open-source AI (Ollama/LLaMA) for intelligent conversations
+- **User Consent System**: GDPR-compliant with granular permissions
+- **AI-Powered Moderation**: Smart moderation based on behavior patterns
+- **Advanced Database**: MongoDB with comprehensive user profiles
+- **Server Requirement**: Users must join the official server to use the bot
+- **Improved Partnerships**: Enhanced features beyond Skyforce
+- **Custom Error Handling**: Centralized error management and logging
 
-### Key Features
+## ✨ Key Features
 
-✅ **Advanced Moderation**: Complete moderation suite with logging, warnings, and automatic actions
-✅ **AI-Powered Chat**: Intelligent conversations using LangChain with memory and sentiment analysis
-✅ **User Database**: Comprehensive MongoDB schema storing user stats, interactions, and preferences
-✅ **Gamification**: Experience points (XP), leveling system, achievements, and badges
-✅ **Partnership System**: Multi-tier partnership framework with trust scores and ban list sharing
-✅ **Event Management**: Welcome/goodbye messages, event tracking, and statistics
-✅ **Music Commands**: Integrated music playback and queue management
-✅ **Customization**: Per-server configuration and user preferences
-✅ **Open-Source AI**: Uses open-source AI models (HuggingFace) with optional OpenAI fallback
+### 1. User Consent System (CRITICAL)
+- Automatic consent request on first interaction
+- GDPR-compliant permission model
+- Tracks: username, avatar, guild membership, roles, interactions
+- Visual consent embed with Accept/Decline buttons
+- Stored in MongoDB with full audit trail
 
----
+### 2. AI System (100% Open-Source)
+- Ollama/LLaMA integration for local AI processing
+- Learns user behavior patterns for personalized responses
+- Privacy-first: data stored locally, not on external servers
+- Adaptive learning from interactions
+
+### 3. AI-Powered Moderation
+- Analyzes messages and user behavior
+- Flags spam, toxic language, suspicious patterns
+- Automatic action execution
+- Full moderation logs
+
+### 4. Server Requirement Enforcement
+- Users MUST be in: https://discord.gg/Pm24vTu3wR
+- Validated on every interaction
+- Returns helpful error message with invite
+
+### 5. Advanced Database
+- User profiles with behavior patterns
+- Guild configurations
+- Moderation history
+- Consent tracking
+
+### 6. Improved Partnership System
+- Dynamic tier system (Bronze, Silver, Gold, Platinum)
+- Revenue sharing model
+- Cross-server events
+- Partner reputation tracking
+- Dedicated dashboard
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- MongoDB 5.0+ (local or MongoDB Atlas)
+- Node.js >= 18.0.0
+- MongoDB (local or Atlas)
+- Ollama with LLaMA model
 - Discord Bot Token
-- Discord Server (for testing)
 
 ### Installation
 
-For detailed installation and setup instructions, see [INSTALLATION.md](./INSTALLATION.md)
-
-#### Quick Setup:
-
 ```bash
-# 1. Clone the repository
+# Clone repository
 git clone https://github.com/Fl4chi/MinfoAi.git
 cd MinfoAi
 
-# 2. Install dependencies
+# Install dependencies
 npm install
 
-# 3. Configure environment variables
+# Setup environment
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env with your tokens and URIs
 
-# 4. Start the bot
+# Start AI server (Ollama)
+ollama serve
+
+# In another terminal, start bot
 npm start
 ```
 
----
+### Configuration
 
-## 📦 Project Structure
-
-```
-MinfoAi/
-├── src/
-│   ├── index.js                 # Main bot entry point
-│   ├── commands/                # Command files
-│   ├── events/                  # Event handlers
-│   ├── database/
-│   │   ├── userSchema.js        # MongoDB user schema with comprehensive fields
-│   │   ├── aiHandler.js         # LangChain AI integration
-│   │   ├── dbConnection.js      # MongoDB connection management
-│   │   └── partnershipSchema.js # Partnership data structure
-│   ├── handlers/
-│   │   └── partnershipHandler.js # Partnership system logic
-│   └── utils/                   # Utility functions
-├── INSTALLATION.md              # Detailed setup guide
-├── PARTNERSHIP_GUIDE.md         # Partnership system documentation
-├── .env.updated                 # Updated environment variables
-├── .env.example                 # Environment template
-├── package.json                 # Dependencies
-└── README.md                    # This file
-```
-
----
-
-## 🗄️ Database (MongoDB)
-
-The bot now features a comprehensive MongoDB schema for storing user data:
-
-### User Schema Fields
-
-```javascript
-{
-  userId: String,
-  username: String,
-  discriminator: String,
-  avatar: String,
-  
-  // Gamification
-  xp: Number,
-  level: Number,
-  reputation: Number,
-  badges: [String],
-  achievements: [String],
-  
-  // Moderation
-  warnings: Number,
-  mutes: [{
-    muteId: String,
-    reason: String,
-    duration: Number,
-    timestamp: Date
-  }],
-  bans: [{
-    banId: String,
-    reason: String,
-    timestamp: Date
-  }],
-  
-  // AI Interactions
-  aiInteractions: Number,
-  sentimentScore: Number,
-  conversationHistory: [String],
-  preferences: {
-    language: String,
-    timezone: String,
-    aiEnabled: Boolean
-  },
-  
-  // Activity
-  joinDate: Date,
-  lastActiveDate: Date,
-  messageCount: Number,
-  voteCount: Number,
-  
-  // Transactions
-  transactions: [{
-    type: String,
-    amount: Number,
-    timestamp: Date,
-    description: String
-  }]
-}
-```
-
----
-
-## 🤖 AI System (LangChain Integration)
-
-The bot now features an advanced AI system using LangChain:
-
-### Features
-
-- **Open-Source Models**: Primary support for HuggingFace models
-- **Memory Management**: Conversation history and context awareness
-- **Sentiment Analysis**: Automatic tone detection and response adjustment
-- **User Profiling**: AI learns user preferences and communication style
-- **Fallback System**: Optional OpenAI integration for advanced reasoning
-- **Error Handling**: Robust error management and graceful degradation
-
-### Usage
-
-```javascript
-const aiHandler = require('./database/aiHandler');
-
-// Initialize AI
-await aiHandler.initializeAI();
-
-// Generate response
-const response = await aiHandler.generateResponse(userId, userMessage, {
-  context: conversationContext,
-  personality: botPersonality
-});
-```
-
----
-
-## 🤝 Partnership System
-
-The bot features a comprehensive partnership framework allowing servers to collaborate.
-
-### Partnership Tiers
-
-| Tier | Member Limit | Ban List Sharing | Cross-Server Events | Support |
-|------|-------------|-----------------|-------------------|----------|
-| **Bronze** | Up to 5 | ✓ | ✗ | Community |
-| **Silver** | Up to 20 | ✓ | ✓ | Priority |
-| **Gold** | Up to 50 | ✓ | ✓ | Dedicated |
-| **Platinum** | Unlimited | ✓ | ✓ | 24/7 Support |
-
-### Key Features
-
-- **Ban List Sharing**: Automatically share and sync ban lists between partner servers
-- **Referral System**: Earn rewards by referring other servers
-- **Trust Score**: 0-100 score based on partnership history and rule compliance
-- **Cross-Server Events**: Organize events across multiple partner servers
-- **Violation Reporting**: Automatic detection and handling of partnership violations
-- **Analytics**: Detailed partnership statistics and member insights
-
-For detailed partnership documentation, see [PARTNERSHIP_GUIDE.md](./PARTNERSHIP_GUIDE.md)
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file with the following variables:
-
+Edit `.env`:
 ```env
-# Discord
-DISCORD_TOKEN=your_bot_token_here
-DISCORD_CLIENT_ID=your_client_id
-
-# MongoDB
-MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/minfoai
-MONGO_DB_NAME=minfoai
-
-# AI System
-AI_MODEL_TYPE=huggingface # or openai
-HUGGINGFACE_API_KEY=your_huggingface_key
-OPENAI_API_KEY=your_openai_key (optional)
-
-# Bot Configuration
-BOT_PREFIX=!
-BOT_LANGUAGE=en
-BOT_TIMEZONE=UTC
-
-# Features
-AI_ENABLED=true
-MODERATION_ENABLED=true
-PARTNERSHIP_ENABLED=true
-MUSIC_ENABLED=true
+DISCORD_TOKEN=your_token
+MONGODB_URI=mongodb://...
+OLLAMA_API_URL=http://localhost:11434
+OFFICIAL_SERVER_ID=your_server_id
 ```
 
-For a complete list of environment variables, see [.env.updated](./.env.updated)
+## 📁 Project Structure
 
----
+```
+src/
+├── bot.js                        # Main entry point
+├── commands/                     # Slash commands
+├── events/                       # Discord events
+├── utils/
+│   ├── errorHandler.js          # Error handling
+│   ├── consentManager.js        # User consent
+│   └── serverValidator.js       # Server validation
+├── ai/
+│   └── aiIntegration.js         # AI system
+├── moderation/
+│   └── aiModeration.js          # AI moderation
+├── database/
+│   ├── connection.js            # DB connection
+│   └── userSchema.js            # User model
+├── partnership/
+│   └── partnershipManager.js    # Partner system
+└── config/
+    └── botConfig.js             # Configuration
+```
 
-## 📖 Commands
+## 🛠️ Development
 
-### Admin Commands
+```bash
+# Run tests
+npm run test
 
-- `/ban <user> [reason]` - Ban a user from the server
-- `/kick <user> [reason]` - Kick a user from the server
-- `/warn <user> [reason]` - Warn a user
-- `/mute <user> <duration> [reason]` - Mute a user
-- `/unmute <user>` - Unmute a user
+# Build project
+npm run build
 
-### AI Commands
+# Deploy bot
+npm run deploy
 
-- `/ask <question>` - Ask the AI a question
-- `/chat` - Start a conversation with the AI
-- `/ai-settings` - Configure AI behavior
+# View logs
+tail -f logs/error-*.log
+```
 
-### Partnership Commands
+## 📚 Documentation
 
-- `/partnership request` - Request to form a partnership
-- `/partnership view` - View partnership details
-- `/partnership manage` - Manage partnership settings
-- `/partnership stats` - View partnership statistics
+For comprehensive documentation, see [v3-SETUP.md](./v3-SETUP.md)
+
+## 🔧 Commands
 
 ### User Commands
+- `/ai [message]` - Chat with AI
+- `/info` - Bot information
+- `/consent` - Manage permissions
+- `/help` - Get help
 
-- `/profile` - View your user profile
-- `/stats` - View your statistics
-- `/achievements` - View your achievements
-- `/leaderboard` - View server leaderboard
+### Admin Commands
+- `/moderation` - Moderation settings
+- `/logs` - View logs
+- `/config` - Bot configuration
 
-### Music Commands
+### Partner Commands
+- `/partner apply` - Apply for partnership
+- `/partner status` - Check status
+- `/partner dashboard` - Partner dashboard
 
-- `/play <song>` - Play a song
-- `/stop` - Stop playback
-- `/queue` - View music queue
-- `/skip` - Skip current song
+## 🐛 Troubleshooting
 
----
+**Bot not responding?**
+- Check Discord token in `.env`
+- Verify bot intents are enabled
+- Check MongoDB connection
+- View logs in `logs/error-*.log`
 
-## 🔧 Development
+**AI not working?**
+- Verify Ollama is running: `ollama serve`
+- Check `OLLAMA_API_URL` in `.env`
+- Ensure LLaMA model is downloaded: `ollama pull llama2`
 
-### Setting Up Development Environment
+**Database errors?**
+- Verify MongoDB URI format
+- Check network access in MongoDB Atlas
+- Verify database user permissions
 
-```bash
-# Install dev dependencies
-npm install --save-dev nodemon
+## 📋 Version History
 
-# Start in development mode (with auto-reload)
-npm run dev
+### v3.0 (Current)
+- Complete rewrite from v2.0
+- User consent system (GDPR-compliant)
+- 100% open-source AI
+- AI-powered moderation
+- Advanced database restructuring
+- Server requirement enforcement
+- Improved partnership system
+- Custom error handling
 
-# Run tests
-npm test
-```
+### v2.0
+- Previous version (deprecated)
 
-### Creating New Commands
+## 📄 License
 
-```javascript
-module.exports = {
-  name: 'ping',
-  description: 'Ping command',
-  async execute(message, args) {
-    await message.reply('Pong!');
-  }
-};
-```
+MIT License - See [LICENSE](./LICENSE) file
 
-### Creating New Events
+## 🤝 Support
 
-```javascript
-module.exports = {
-  name: 'messageCreate',
-  async execute(message, client) {
-    // Handle message event
-  }
-};
-```
+For help and questions: [Join our Discord](https://discord.gg/Pm24vTu3wR)
 
----
+## 👥 Contributors
 
-## 🧪 Testing
-
-```bash
-# Run all tests
-npm test
-
-# Run with coverage
-npm run test:coverage
-
-# Watch mode
-npm run test:watch
-```
+- **Fl4chi** - Lead Developer
+- **MinfoAi Community** - Contributors
 
 ---
 
-## 📊 Performance & Optimization
+**Version**: 3.0.0  
+**Status**: Active Development  
+**Last Updated**: 2024  
 
-### Database Optimization
-
-- Connection pooling with automatic retry logic
-- Indexed queries for fast data retrieval
-- Batch operations for bulk updates
-- Connection health checks
-
-### AI System Optimization
-
-- Model caching for faster inference
-- Conversation memory management
-- Token usage optimization
-- Asynchronous processing with queue management
-
-### Bot Optimization
-
-- Event-driven architecture
-- Efficient command parsing
-- Rate limiting and cooldowns
-- Memory leak prevention
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-## 🆘 Support
-
-### Documentation
-
-- [Installation Guide](./INSTALLATION.md)
-- [Partnership System Guide](./PARTNERSHIP_GUIDE.md)
-- [Deployment Guide](./DEPLOYMENT.md)
-
-### Getting Help
-
-- Join our [Discord Support Server](https://discord.gg/your-invite-link)
-- Open an [Issue on GitHub](https://github.com/Fl4chi/MinfoAi/issues)
-- Check [FAQ](./FAQ.md) for common questions
-
----
-
-## 🎯 Roadmap
-
-- [ ] Voice-based AI integration
-- [ ] Machine learning for user behavior prediction
-- [ ] Advanced analytics dashboard
-- [ ] Mobile app for partnership management
-- [ ] Multi-language support
-- [ ] Integration with more AI providers
-- [ ] Custom command builder
-- [ ] Web-based configuration panel
-
----
-
-## 👨‍💻 Author
-
-**Fl4chi** - [GitHub Profile](https://github.com/Fl4chi)
-
----
-
-## 🙏 Acknowledgments
-
-- Discord.js community for the amazing library
-- LangChain team for the AI integration framework
-- MongoDB documentation and community
-- All contributors who have helped improve MinfoAi
-
----
-
-**Last Updated**: 2024
-**Status**: Active Development ✨
+⭐ If you find MinfoAi useful, please consider giving it a star!
