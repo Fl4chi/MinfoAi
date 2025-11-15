@@ -1,210 +1,246 @@
-# MinfoAi v3.0 - Advanced Discord Bot
+# 🤝 MinfoAI v4.0 - Partnership Bot
 
-![Version](https://img.shields.io/badge/version-3.0.0-blue)
-![Node.js](https://img.shields.io/badge/node.js-18+-green)
-![License](https://img.shields.io/badge/license-MIT-brightgreen)
+[![version](https://img.shields.io/badge/version-4.0.0-blue)](https://github.com/Fl4chi/MinfoAi)
+[![node.js](https://img.shields.io/badge/node.js-18+-green)](https://nodejs.org)
+[![license](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
-## 🤖 Overview
+> Bot Discord moderno con sistema partnership innovativo - Semplice, veloce ed efficace
 
-MinfoAi v3.0 is a complete rebuild of the Discord bot featuring:
-- **AI Integration**: 100% open-source AI (Ollama/LLaMA) for intelligent conversations
-- **User Consent System**: GDPR-compliant with granular permissions
-- **AI-Powered Moderation**: Smart moderation based on behavior patterns
-- **Advanced Database**: MongoDB with comprehensive user profiles
-- **Server Requirement**: Users must join the official server to use the bot
-- **Improved Partnerships**: Enhanced features beyond Skyforce
-- **Custom Error Handling**: Centralized error management and logging
+## 📋 Indice
+- [Overview](#overview)
+- [Caratteristiche](#caratteristiche)
+- [Installazione](#installazione)
+- [Comandi](#comandi)
+- [Sistema Coins](#sistema-coins)
+- [Configurazione](#configurazione)
 
-## ✨ Key Features
+## 🎯 Overview
 
-### 1. User Consent System (CRITICAL)
-- Automatic consent request on first interaction
-- GDPR-compliant permission model
-- Tracks: username, avatar, guild membership, roles, interactions
-- Visual consent embed with Accept/Decline buttons
-- Stored in MongoDB with full audit trail
+MinfoAI v4.0 è stato completamente ridisegnato per concentrarsi sul sistema partnership. Abbiamo rimosso la complessità di SkyForce e creato un bot **10x più semplice e veloce**.
 
-### 2. AI System (100% Open-Source)
-- Ollama/LLaMA integration for local AI processing
-- Learns user behavior patterns for personalized responses
-- Privacy-first: data stored locally, not on external servers
-- Adaptive learning from interactions
+### Perché v4.0?
+- ❌ SkyForce: 3 partnership ogni 3 giorni = LENTO
+- ✅ MinfoAI v4.0: 1 partnership ogni 2 ore = VELOCE
+- ❌ SkyForce: Setup complesso con chain obbligatorie
+- ✅ MinfoAI v4.0: Setup in 2 minuti, zero configurazione
+- ❌ SkyForce: Coins inutili senza valore
+- ✅ MinfoAI v4.0: Coins con rewards reali e spendibili
 
-### 3. AI-Powered Moderation
-- Analyzes messages and user behavior
-- Flags spam, toxic language, suspicious patterns
-- Automatic action execution
-- Full moderation logs
+## ✨ Caratteristiche
 
-### 4. Server Requirement Enforcement
-- Users MUST be in: https://discord.gg/Pm24vTu3wR
-- Validated on every interaction
-- Returns helpful error message with invite
+### 🚀 Setup Velocissimo
+- ⏱️ **2 minuti** per iniziare (vs 30 minuti di SkyForce)
+- 🎯 Solo **3 campi** da compilare
+- ❌ **Zero prerequisiti** (no 100+ membri richiesti)
+- ✅ **Attivazione immediata**
 
-### 5. Advanced Database
-- User profiles with behavior patterns
-- Guild configurations
-- Moderation history
-- Consent tracking
+### 🤖 Automazione Completa
+- 🔄 **Auto-send**: Partnership automatiche ogni 2 ore
+- ✅ **Auto-accept**: Accetta automaticamente partnership di qualità
+- 🎯 **Smart matching**: Algoritmo intelligente per trovare server compatibili
+- 📊 **Analytics real-time**: Statistiche sempre aggiornate
 
-### 6. Improved Partnership System
-- Dynamic tier system (Bronze, Silver, Gold, Platinum)
-- Revenue sharing model
-- Cross-server events
-- Partner reputation tracking
-- Dedicated dashboard
+### 💰 Sistema Coins
+Guadagna coins quando gli utenti:
+- 👤 Entrano nel tuo server tramite partnership: **+1 coin**
+- 💬 Rimangono attivi (5+ messaggi): **+1 coin/settimana**
+- 🎖️ Ricevono ruoli: **+5 coins**
+- ⏰ Rimangono 7 giorni: **+10 coins**
+- 🏆 Rimangono 30 giorni: **+50 coins**
 
-## 🚀 Quick Start
+### 🎁 Usa i Coins Per
+- 🚀 **Partnership Boost** (50 coins): Ricevi 2-3x più partnership
+- 🎖️ **Badge Verified Partner** (100 coins): Badge esclusivo
+- ⚡ **2x Coins Multiplier** (200 coins): Guadagna il doppio per 7 giorni
+- ⭐ **Featured Listing** (300 coins): In homepage del bot per 3 giorni
+- 🏅 **Leaderboard Top 50** (500 coins): Visibilità globale
 
-### Prerequisites
-- Node.js >= 18.0.0
-- MongoDB (local or Atlas)
-- Ollama with LLaMA model
-- Discord Bot Token
+## 📦 Installazione
 
-### Installation
+### Requisiti
+- Node.js 18+
+- MongoDB (locale o Atlas)
+- Bot Discord token
 
+### Setup Rapido
 ```bash
-# Clone repository
+# Clona repository
 git clone https://github.com/Fl4chi/MinfoAi.git
 cd MinfoAi
 
-# Install dependencies
+# Installa dipendenze
 npm install
 
-# Setup environment
+# Configura .env
 cp .env.example .env
-# Edit .env with your tokens and URIs
+# Modifica .env con i tuoi dati
 
-# Start AI server (Ollama)
-ollama serve
-
-# In another terminal, start bot
+# Avvia bot
 npm start
 ```
 
-### Configuration
-
-Edit `.env`:
+### Configurazione .env
 ```env
-DISCORD_TOKEN=your_token
-MONGODB_URI=mongodb://...
-OLLAMA_API_URL=http://localhost:11434
-OFFICIAL_SERVER_ID=your_server_id
+DISCORD_TOKEN=your_token_here
+CLIENT_ID=your_client_id
+MONGODB_URI=mongodb://localhost:27017/minfoai
 ```
 
-## 📁 Project Structure
+## 🎮 Comandi
 
+### `/partner-setup`
+🔧 Setup iniziale (2 minuti)
 ```
-src/
-├── bot.js                        # Main entry point
-├── commands/                     # Slash commands
-├── events/                       # Discord events
-├── utils/
-│   ├── errorHandler.js          # Error handling
-│   ├── consentManager.js        # User consent
-│   └── serverValidator.js       # Server validation
-├── ai/
-│   └── aiIntegration.js         # AI system
-├── moderation/
-│   └── aiModeration.js          # AI moderation
-├── database/
-│   ├── connection.js            # DB connection
-│   └── userSchema.js            # User model
-├── partnership/
-│   └── partnershipManager.js    # Partner system
-└── config/
-    └── botConfig.js             # Configuration
+Parametri:
+- canale: Canale per ricevere partnerships
+- descrizione: Descrivi il tuo server (max 200 caratteri)
+- categoria: Gaming/Comunità/Studio/Creatività/Altro
 ```
 
-## 🛠️ Development
+### `/partner-send`
+📤 Invia partnership manualmente
+- Cooldown: 2 ore
+- Trova automaticamente server compatibili
+- Invia embed professionale
 
+### `/partner-auto [on/off]`
+🤖 **NOVITÀ**: Automazione completa
+- Attiva/disattiva auto-send
+- Partnership automatiche ogni 2-4 ore
+- Crescita 24/7 passiva
+
+### `/partner-stats`
+📊 Dashboard statistiche
+Mostra:
+- Partnership inviate/ricevute oggi
+- Utenti raggiunti (stima)
+- Tier attuale (Basic/Growth/Premium)
+- Prossima partnership disponibile
+- Crescita membri (% vs settimana scorsa)
+
+### `/partner-preferences`
+⚙️ Gestisci preferenze
+- 🤖 Auto-accept: ON/OFF
+- 🔔 Notifiche: ON/OFF
+- ⏸️ Pausa: ON/OFF
+- 🎯 Categoria preferita
+- 👤 Min membri partner
+
+### `/partner-blacklist`
+🚫 Blocca/sblocca server (max 10)
+```
+/partner-blacklist add [server-id]  # Blocca
+/partner-blacklist remove [server-id]  # Sblocca
+/partner-blacklist list  # Mostra lista
+```
+
+## 🏆 Sistema Tier
+
+### Basic (Gratuito)
+- 1 partnership ogni 2 ore (12/giorno)
+- Stats basiche
+- Tracking coins
+
+### Growth (50 coins O €1.99/mese)
+- 1 partnership ogni 1 ora (24/giorno) - **2x veloce**
+- +20% coins guadagnati
+- Featured 3 giorni/mese
+
+### Premium (200 coins O €4.99/mese)
+- 1 partnership ogni 30 min (48/giorno) - **4x veloce**
+- +50% coins guadagnati
+- Featured 7 giorni/mese
+- API access + Webhook
+- Partnership insurance
+
+## 🛠️ Tecnologie
+
+- **Discord.js v14**: API Discord moderna
+- **MongoDB**: Database NoSQL per scalabilità
+- **Node-cron**: Automazione partnerships
+- **Mongoose**: ODM per MongoDB
+
+## 📁 Struttura Progetto
+
+```
+MinfoAi/
+├── src/
+│   ├── commands/
+│   │   └── partnership/
+│   │       ├── setup.js
+│   │       ├── send.js
+│   │       ├── auto.js
+│   │       ├── stats.js
+│   │       ├── preferences.js
+│   │       └── blacklist.js
+│   ├── database/
+│   │   ├── connection.js
+│   │   └── partnershipSchema.js
+│   ├── handlers/
+│   │   ├── partnershipHandler.js
+│   │   ├── commandHandler.js
+│   │   └── eventHandler.js
+│   ├── events/
+│   │   ├── ready.js
+│   │   ├── interactionCreate.js
+│   │   └── guildMemberAdd.js
+│   ├── utils/
+│   │   ├── embedBuilder.js
+│   │   └── logger.js
+│   └── index.js
+├── .env.example
+├── .gitignore
+├── package.json
+└── README.md
+```
+
+## 🚀 Deploy
+
+### Deploy su VPS
 ```bash
-# Run tests
-npm run test
-
-# Build project
-npm run build
-
-# Deploy bot
-npm run deploy
-
-# View logs
-tail -f logs/error-*.log
+# Con PM2
+npm install -g pm2
+pm2 start src/index.js --name minfoai
+pm2 save
 ```
 
-## 📚 Documentation
+### Deploy su Heroku
+```bash
+heroku create minfoai-bot
+heroku addons:create mongolab
+git push heroku main
+```
 
-For comprehensive documentation, see [v3-SETUP.md](./v3-SETUP.md)
+## 📝 Changelog
 
-## 🔧 Commands
+### v4.0.0 (15 Nov 2025) - MAJOR RELEASE
+- ✅ Sistema partnership completamente ridisegnato
+- ✅ Rimosso AI e features complesse
+- ✅ Aggiunto auto-send partnerships
+- ✅ Aggiunto sistema coins con rewards reali
+- ✅ Cooldown ridotto a 2 ore (da 3 giorni)
+- ✅ Setup semplificato (2 minuti)
+- ✅ Smart matching algorithm
+- ✅ Auto-accept intelligente
+- ✅ Dashboard statistics
+- ✅ Sistema tier (Basic/Growth/Premium)
 
-### User Commands
-- `/ai [message]` - Chat with AI
-- `/info` - Bot information
-- `/consent` - Manage permissions
-- `/help` - Get help
+## 🤝 Supporto
 
-### Admin Commands
-- `/moderation` - Moderation settings
-- `/logs` - View logs
-- `/config` - Bot configuration
+- 📧 Email: fl4chi@example.com
+- 💬 Discord: [Server di supporto](#)
+- 🐛 Issues: [GitHub Issues](https://github.com/Fl4chi/MinfoAi/issues)
 
-### Partner Commands
-- `/partner apply` - Apply for partnership
-- `/partner status` - Check status
-- `/partner dashboard` - Partner dashboard
+## 📄 Licenza
 
-## 🐛 Troubleshooting
+MIT License - Vedi [LICENSE](LICENSE) per dettagli
 
-**Bot not responding?**
-- Check Discord token in `.env`
-- Verify bot intents are enabled
-- Check MongoDB connection
-- View logs in `logs/error-*.log`
+## 🙏 Credits
 
-**AI not working?**
-- Verify Ollama is running: `ollama serve`
-- Check `OLLAMA_API_URL` in `.env`
-- Ensure LLaMA model is downloaded: `ollama pull llama2`
+Creato da **Fl4chi** con ❤️
 
-**Database errors?**
-- Verify MongoDB URI format
-- Check network access in MongoDB Atlas
-- Verify database user permissions
-
-## 📋 Version History
-
-### v3.0 (Current)
-- Complete rewrite from v2.0
-- User consent system (GDPR-compliant)
-- 100% open-source AI
-- AI-powered moderation
-- Advanced database restructuring
-- Server requirement enforcement
-- Improved partnership system
-- Custom error handling
-
-### v2.0
-- Previous version (deprecated)
-
-## 📄 License
-
-MIT License - See [LICENSE](./LICENSE) file
-
-## 🤝 Support
-
-For help and questions: [Join our Discord](https://discord.gg/Pm24vTu3wR)
-
-## 👥 Contributors
-
-- **Fl4chi** - Lead Developer
-- **MinfoAi Community** - Contributors
+Ispirato da SkyForce ma **10x migliore**
 
 ---
 
-**Version**: 3.0.0  
-**Status**: Active Development  
-**Last Updated**: 2024  
-
-⭐ If you find MinfoAi useful, please consider giving it a star!
+⭐ Se ti piace questo progetto, lascia una star su GitHub!
